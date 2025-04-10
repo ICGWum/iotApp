@@ -9,10 +9,12 @@ const PhotoGalleryScreen = () => {
     <View style={styles.container}>
       {/* Sidebar */}
       <View style={styles.sidebar}>
+        {/* Location Header */}
         <View style={styles.locationContainer}>
           <Text style={styles.locationText}>Mechielsen</Text>
         </View>
 
+        {/* Sidebar Navigation Items */}
         <TouchableOpacity
           style={styles.sidebarItem}
           onPress={() => navigation.navigate("KoppelenScreen")}
@@ -28,7 +30,6 @@ const PhotoGalleryScreen = () => {
         >
           <Text style={styles.sidebarText}>Foto's</Text>
         </TouchableOpacity>
-
         <TouchableOpacity
           style={styles.sidebarItem}
           onPress={() => navigation.navigate("Handleiding")}

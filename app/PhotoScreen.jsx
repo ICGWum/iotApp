@@ -25,10 +25,12 @@ const PhotoGalleryScreen = () => {
     <View style={styles.container}>
       {/* Sidebar */}
       <View style={styles.sidebar}>
+        {/* Location Header */}
         <View style={styles.locationContainer}>
           <Text style={styles.locationText}>Mechielsen</Text>
         </View>
 
+        {/* Navigation Buttons */}
         <TouchableOpacity
           style={styles.sidebarItem}
           onPress={() => navigation.navigate("KoppelenScreen")}
@@ -54,12 +56,16 @@ const PhotoGalleryScreen = () => {
 
       {/* Main Content */}
       <View style={styles.content}>
+        {/* Screen Title */}
         <Text style={styles.title}>Koppelen Tutorial</Text>
 
+        {/* Photo Gallery */}
         <ScrollView style={styles.scrollContainer}>
           {photos.map((photo) => (
             <View key={photo.id} style={styles.photoContainer}>
+              {/* Photo */}
               <Image source={photo.source} style={styles.photo} />
+              {/* Photo Label */}
               <Text style={styles.photoLabel}>{photo.title}</Text>
             </View>
           ))}
@@ -73,67 +79,67 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     flexDirection: "row",
-    backgroundColor: "#fff",
+    backgroundColor: "#fff", // Background color for the entire screen
   },
   sidebar: {
-    width: 100,
-    backgroundColor: "#f0f0f0",
-    paddingVertical: 20,
-    alignItems: "center",
+    width: 100, // Sidebar width
+    backgroundColor: "#f0f0f0", // Sidebar background color
+    paddingVertical: 20, // Vertical padding for the sidebar
+    alignItems: "center", // Center align items in the sidebar
   },
   sidebarItem: {
-    paddingVertical: 15,
-    width: "100%",
-    alignItems: "center",
+    paddingVertical: 15, // Vertical padding for each sidebar item
+    width: "100%", // Full width for sidebar items
+    alignItems: "center", // Center align text in sidebar items
   },
   sidebarText: {
-    fontSize: 16,
-    color: "#333",
+    fontSize: 16, // Font size for sidebar text
+    color: "#333", // Text color for sidebar items
   },
   locationContainer: {
-    paddingVertical: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#ccc",
-    width: "100%",
-    alignItems: "center",
+    paddingVertical: 20, // Vertical padding for the location container
+    borderBottomWidth: 1, // Bottom border for separation
+    borderBottomColor: "#ccc", // Border color
+    width: "100%", // Full width for the location container
+    alignItems: "center", // Center align text
   },
   locationText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#555",
-    marginVertical: 5,
+    fontSize: 14, // Font size for location text
+    fontWeight: "bold", // Bold text for location
+    color: "#555", // Text color for location
+    marginVertical: 5, // Vertical margin for spacing
   },
   content: {
-    flex: 1,
-    padding: 20,
+    flex: 1, // Take up remaining space
+    padding: 20, // Padding for the main content
   },
   title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
+    fontSize: 20, // Font size for the title
+    fontWeight: "bold", // Bold text for the title
+    marginBottom: 20, // Margin below the title
+    textAlign: "center", // Center align the title
   },
   scrollContainer: {
-    flex: 1,
+    flex: 1, // Allow scrolling for the photo gallery
   },
   photoContainer: {
-    marginBottom: 30,
-    alignItems: "center",
+    marginBottom: 30, // Margin below each photo
+    alignItems: "center", // Center align photos
   },
   photo: {
-    width: "100%",
-    height: 250,
-    resizeMode: "cover",
-    borderRadius: 10,
-    marginBottom: 10,
+    width: "100%", // Full width for photos
+    height: 250, // Fixed height for photos
+    resizeMode: "cover", // Cover the available space
+    borderRadius: 10, // Rounded corners for photos
+    marginBottom: 10, // Margin below each photo
   },
-    boldText: {
-    fontWeight: "bold", // Add bold text style
+  boldText: {
+    fontWeight: "bold", // Bold text style for selected sidebar item
   },
   photoLabel: {
-    fontSize: 16,
-    fontWeight: "bold",
-    alignSelf: "flex-start",
+    fontSize: 16, // Font size for photo labels
+    fontWeight: "bold", // Bold text for photo labels
+    alignSelf: "flex-start", // Align labels to the start
   },
 });
 

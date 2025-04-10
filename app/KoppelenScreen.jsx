@@ -9,18 +9,22 @@ import {
   Alert,
 } from "react-native";
 
+// Options for trekkers and koppelingen
 const trekkerOptions = ["Voertuig A", "Voertuig B", "Voertuig C", "Voertuig D"];
 const koppelingOptions = ["Schaar", "Boor", "Graaf", "Hamer"];
 
 const KoppelenScreen = () => {
   const navigation = useNavigation();
 
+  // State to manage visibility of the trekker and koppeling lists
   const [showTrekkerList, setShowTrekkerList] = useState(false);
   const [showKoppelingList, setShowKoppelingList] = useState(false);
 
+  // State to store the selected trekker and koppeling
   const [selectedTrekker, setSelectedTrekker] = useState("");
   const [selectedKoppeling, setSelectedKoppeling] = useState("");
 
+  // Handle confirmation and navigate to the next screen
   const handleConfirm = () => {
     if (!selectedTrekker || !selectedKoppeling) {
       Alert.alert("Selecteer eerst een trekker en een koppeling");
@@ -36,7 +40,7 @@ const KoppelenScreen = () => {
     <View style={styles.container}>
       <Text style={styles.chooseOption}>Kies een optie:</Text>
 
-      {/* Trekker Selectie */}
+      {/* Trekker Selection */}
       <TouchableOpacity
         style={styles.button}
         onPress={() => setShowTrekkerList(!showTrekkerList)}
@@ -66,7 +70,7 @@ const KoppelenScreen = () => {
         />
       )}
 
-      {/* Koppeling Selectie */}
+      {/* Koppeling Selection */}
       <TouchableOpacity
         style={styles.button}
         onPress={() => setShowKoppelingList(!showKoppelingList)}
@@ -96,12 +100,12 @@ const KoppelenScreen = () => {
         />
       )}
 
-      {/* Bevestig Knop */}
+      {/* Confirm Button */}
       <TouchableOpacity
         style={[
           styles.confirmButton,
           !(selectedTrekker && selectedKoppeling) && {
-            backgroundColor: "#ccc",
+            backgroundColor: "#ccc", // Disable button if no selection
           },
         ]}
         onPress={handleConfirm}
@@ -110,7 +114,6 @@ const KoppelenScreen = () => {
         <Text style={styles.confirmButtonText}>Bevestigen</Text>
       </TouchableOpacity>
     </View>
-
   );
 };
 

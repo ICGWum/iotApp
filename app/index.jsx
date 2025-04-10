@@ -14,7 +14,7 @@ import CombinatieConfig from "./CombinatieConfig";
 import Banner from "./Banner";
 import KoppelingTutorial from "./KoppelingTutorial";
 
-
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBcXSf-sWWV5apE4p4nTX8Kk-1P6GHkDH8",
   authDomain: "iotapp-18a62.firebaseapp.com",
@@ -36,9 +36,10 @@ export { auth };
 const Stack = createStackNavigator();
 
 function HomeScreen({ navigation }) {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState(""); // State to store email input
+  const [password, setPassword] = useState(""); // State to store password input
 
+  // Handle login functionality
   const handleLogin = async () => {
     try {
       const userCredential = await signInWithEmailAndPassword(
@@ -48,7 +49,7 @@ function HomeScreen({ navigation }) {
       );
       const userEmail = userCredential.user.email;
 
-      // Route based on email
+      // Navigate to different screens based on the user's email
       if (userEmail === "administrator@test.nl") {
         navigation.replace("Administrator");
       } else {
@@ -57,51 +58,50 @@ function HomeScreen({ navigation }) {
     } catch (error) {
       console.log("Error:", error); // Log the error for debugging
 
-      // Show the flash message
+      // Show the flash message for login failure
       showMessage({
         message: error.message || "Login failed",
-        type: "danger", // You can change the message type to success, warning, or info as well
-        duration: 3000, // How long the message stays on screen (in milliseconds)
+        type: "danger", // Message type (danger, success, etc.)
+        duration: 3000, // Duration of the message in milliseconds
       });
     }
   };
 
   return (
     <SafeAreaView style={{ flex: 1 }}>
-        <View style={{ flex: 1 }}>
-          <Banner />
+      <View style={{ flex: 1 }}>
+        <Banner /> 
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.buttonContainer}
+        >
+          <Text style={styles.signInText}>Inloggen</Text> 
+          
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            value={email}
+            onChangeText={setEmail}
+            autoCapitalize="none"
+          />
 
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : "height"}
-            style={styles.buttonContainer}
-          >
-            <Text style={styles.signInText}>Inloggen</Text>
-
-            <TextInput
-              style={styles.input}
-              placeholder="Email"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-            />
-
-            <TextInput
-              style={styles.input}
-              placeholder="Wachtwoord"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
-
-            <View style={styles.buttonWrapper}>
-              <Button title="Login" onPress={handleLogin} />
-            </View>
-          </KeyboardAvoidingView>
-
-          <View style={styles.bannerBottom}>
-            <Text style={styles.footerText}>© 2025 Team B2</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Wachtwoord"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+          
+          <View style={styles.buttonWrapper}>
+            <Button title="Login" onPress={handleLogin} />
           </View>
+        </KeyboardAvoidingView>
+        
+        <View style={styles.bannerBottom}>
+          <Text style={styles.footerText}>© 2025 Team B2</Text>
         </View>
+      </View>
     </SafeAreaView>
   );
 }
@@ -111,13 +111,14 @@ export default function App() {
     <Stack.Navigator
       initialRouteName="Home"
       screenOptions={{
-        headerBackTitleVisible: false,
+        headerBackTitleVisible: false, // Hide back button title
       }}
     >
+      {/* Define all screens in the navigation stack */}
       <Stack.Screen
         name="Home"
         component={HomeScreen}
-        options={{ headerShown: false }}
+        options={{ headerShown: false }} // Hide header for Home screen
       />
       <Stack.Screen
         name="Medewerker"
@@ -148,6 +149,7 @@ export default function App() {
   );
 }
 
+// Styles for the components
 const styles = StyleSheet.create({
   buttonContainer: {
     flex: 1,
