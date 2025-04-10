@@ -9,8 +9,8 @@ import {
   Alert,
 } from "react-native";
 
-const trekkerOptions = ["Trekker A", "Trekker B", "Trekker C"];
-const koppelingOptions = ["Koppeling A", "Koppeling B", "Koppeling C"];
+const trekkerOptions = ["Voertuig A", "Voertuig B", "Voertuig C", "Voertuig D"];
+const koppelingOptions = ["Schaar", "Boor", "Graaf", "Hamer"];
 
 const KoppelenScreen = () => {
   const navigation = useNavigation();
@@ -110,6 +110,7 @@ const KoppelenScreen = () => {
         <Text style={styles.confirmButtonText}>Bevestigen</Text>
       </TouchableOpacity>
     </View>
+
   );
 };
 

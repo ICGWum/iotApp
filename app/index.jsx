@@ -1,7 +1,12 @@
-// In your index file
-import React from "react";
-import { View, Button, Text, StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { View, TextInput, Button, Text, StyleSheet, Alert, KeyboardAvoidingView, Platform } from "react-native";
 import { createStackNavigator } from "@react-navigation/stack";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { initializeApp } from "firebase/app";
+import { getAuth } from "firebase/auth";
+import { SafeAreaView } from "react-native";
+import FlashMessage from "react-native-flash-message";
+
 import MedewerkerScreen from "./MedewerkerScreen";
 import AdministratorScreen from "./AdministratorScreen";
 import KoppelenScreen from "./KoppelenScreen";
@@ -9,34 +14,137 @@ import CombinatieConfig from "./CombinatieConfig";
 import Banner from "./Banner";
 import KoppelingTutorial from "./KoppelingTutorial";
 
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBcXSf-sWWV5apE4p4nTX8Kk-1P6GHkDH8",
+  authDomain: "iotapp-18a62.firebaseapp.com",
+  projectId: "iotapp-18a62",
+  storageBucket: "iotapp-18a62.firebasestorage.app",
+  messagingSenderId: "233179299412",
+  appId: "1:233179299412:web:cb9522f9459689bddb37c1",
+  measurementId: "G-3627MBT7G9",
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+// Initialize Firebase Authentication
+const auth = getAuth(app);
+
+export { auth };
+
 const Stack = createStackNavigator();
 
 function HomeScreen({ navigation }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleLogin = async () => {
+    try {
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      );
+      const userEmail = userCredential.user.email;
+
+      // Route based on email
+      if (userEmail === "administrator@test.nl") {
+        navigation.replace("Administrator");
+      } else {
+        navigation.replace("Medewerker");
+      }
+    } catch (error) {
+      console.log("Error:", error); // Log the error for debugging
+
+      // Show the flash message
+      showMessage({
+        message: error.message || "Login failed",
+        type: "danger", // You can change the message type to success, warning, or info as well
+        duration: 3000, // How long the message stays on screen (in milliseconds)
+      });
+    }
+  };
+
   return (
-    <View style={{ flex: 1 }}>
-      <Banner /> {/* Add the Banner component here */}
-      <View style={styles.buttonContainer}>
-        <Text style={styles.signInText}>Inloggen</Text> {/* Add Sign in text */}
-        <View style={{ marginVertical: 20 }} />{" "}
-        {/* Space between text and buttons */}
-        <View style={styles.buttonWrapper}>
-          <Button
-            title="Medewerker"
-            onPress={() => navigation.navigate("Medewerker")}
-          />
+    <SafeAreaView style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
+          <Banner />
+
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : "height"}
+            style={styles.buttonContainer}
+          >
+            <Text style={styles.signInText}>Inloggen</Text>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+            />
+
+            <TextInput
+              style={styles.input}
+              placeholder="Wachtwoord"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+
+            <View style={styles.buttonWrapper}>
+              <Button title="Login" onPress={handleLogin} />
+            </View>
+          </KeyboardAvoidingView>
+
+          <View style={styles.bannerBottom}>
+            <Text style={styles.footerText}>© 2025 Team B2</Text>
+          </View>
         </View>
-        <View style={{ marginVertical: 10 }} />
-        <View style={styles.buttonWrapper}>
-          <Button
-            title="Administrator"
-            onPress={() => navigation.navigate("Administrator")}
-          />
-        </View>
-      </View>
-      <View style={styles.bannerBottom}>
-        <Text style={styles.footerText}>© 2025 Team B2</Text> {/* Add footer text */}
-      </View>
-    </View>
+    </SafeAreaView>
+  );
+}
+
+export default function App() {
+  return (
+    <Stack.Navigator
+      initialRouteName="Home"
+      screenOptions={{
+        headerBackTitleVisible: false,
+      }}
+    >
+      <Stack.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{ headerShown: false }}
+      />
+      <Stack.Screen
+        name="Medewerker"
+        component={MedewerkerScreen}
+        options={{ headerShown: true, headerTitle: "Medewerker" }}
+      />
+      <Stack.Screen
+        name="Administrator"
+        component={AdministratorScreen}
+        options={{ headerShown: true, headerTitle: "Administrator" }}
+      />
+      <Stack.Screen
+        name="Koppelen"
+        component={KoppelenScreen}
+        options={{ headerShown: true, headerTitle: "Koppelen" }}
+      />
+      <Stack.Screen
+        name="CombinatieConfig"
+        component={CombinatieConfig}
+        options={{ headerShown: true, headerTitle: "Combinatie Config" }}
+      />
+      <Stack.Screen
+        name="KoppelingTutorial"
+        component={KoppelingTutorial}
+        options={{ headerShown: true, headerTitle: "Koppeling Tutorial" }}
+      />
+    </Stack.Navigator>
   );
 }
 
@@ -45,87 +153,36 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    marginTop: -50, // Move the container up by adjusting this value
+    marginTop: -50,
   },
   signInText: {
-    fontSize: 24, // Adjust font size as needed
-    fontWeight: "bold", // Make the text bold
-    marginBottom: 20, // Space below the text
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 20,
+  },
+  input: {
+    height: 40,
+    borderColor: "#ccc",
+    borderWidth: 1,
+    borderRadius: 5,
+    marginBottom: 15,
+    paddingHorizontal: 10,
+    width: "80%",
   },
   buttonWrapper: {
-    width: "80%", // Set a fixed width for the buttons
-    borderRadius: 5, // Optional: Add border radius for rounded corners
-    overflow: "hidden", // Ensure the button respects the border radius
+    width: "80%",
+    borderRadius: 5,
   },
   bannerBottom: {
-    height: 80, // Height of the blue rectangle
-    backgroundColor: "#149cfb", // Color of the rectangle
-    width: "100%", // Full width
-    justifyContent: "center", // Center the text vertically
-    alignItems: "center", // Center the text horizontally
+    height: 80,
+    backgroundColor: "#149cfb",
+    width: "100%",
+    justifyContent: "center",
+    alignItems: "center",
   },
   footerText: {
-    color: "#fff", // Text color
-    fontSize: 16, // Font size
-    textAlign: "center", // Center the text
+    color: "#fff",
+    fontSize: 16,
+    textAlign: "center",
   },
 });
-
-export default function App() {
-  return (
-    <Stack.Navigator
-      initialRouteName="Home"
-      screenOptions={{
-        headerBackTitleVisible: false, // Hide the back button text
-      }}
-    >
-      <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{
-          headerShown: false, // No header for the Home screen
-        }}
-      />
-      <Stack.Screen
-        name="Medewerker"
-        component={MedewerkerScreen}
-        options={{
-          headerShown: true, // Show the header with a back arrow
-          headerTitle: "Medewerker", // Optional: Set a title for the screen
-        }}
-      />
-      <Stack.Screen
-        name="Administrator"
-        component={AdministratorScreen}
-        options={{
-          headerShown: true, // Show the header with a back arrow
-          headerTitle: "Administrator", // Optional: Set a title for the screen
-        }}
-      />
-      <Stack.Screen
-        name="Koppelen"
-        component={KoppelenScreen}
-        options={{
-          headerShown: true, // Show the header with a back arrow
-          headerTitle: "Koppelen", // Optional: Set a title for the screen
-        }}
-      />
-      <Stack.Screen
-        name="CombinatieConfig"
-        component={CombinatieConfig}
-        options={{
-          headerShown: true, // Show the header with a back arrow
-          headerTitle: "Combinatie Config", // Optional: Set a title for the screen
-        }}
-      />
-      <Stack.Screen
-        name="KoppelingTutorial"
-        component={KoppelingTutorial}
-        options={{
-          headerShown: true, // Show the header with a back arrow
-          headerTitle: "Koppeling Tutorial", // Optional: Set a title for the screen
-        }}
-      />
-    </Stack.Navigator>
-  );
-}

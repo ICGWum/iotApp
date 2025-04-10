@@ -16,6 +16,10 @@ export default function AdministratorScreen({ navigation }) {
         title="Go to Combinatie Config"
         onPress={() => navigation.navigate("CombinatieConfig")}
       />
+      <Button
+        title="Logout"
+        onPress={() => navigation.navigate("Home")}
+      />
     </View>
   );
 }

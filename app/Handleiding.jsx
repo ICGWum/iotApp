@@ -19,8 +19,11 @@ const PhotoGalleryScreen = () => {
         >
           <Text style={styles.sidebarText}>Terug</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.sidebarItem}>
-          <Text style={[styles.sidebarText, styles.boldText]}>Scan</Text>
+        <TouchableOpacity
+          style={styles.sidebarItem}
+          onPress={() => navigation.navigate("KoppelingTutorial")}
+        >
+          <Text style={styles.sidebarText}>Scan</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.sidebarItem}
@@ -29,43 +32,17 @@ const PhotoGalleryScreen = () => {
           <Text style={styles.sidebarText}>Foto's</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={styles.sidebarItem}
-          onPress={() => navigation.navigate("Handleiding")}
-        >
-          <Text style={styles.sidebarText}>Handleiding</Text>
+        <TouchableOpacity style={styles.sidebarItem}>
+          <Text style={[styles.sidebarText, styles.boldText]}>Handleiding</Text>
         </TouchableOpacity>
       </View>
 
       {/* Main Content */}
       <View style={styles.content}>
-        <Text style={styles.title}>Koppelingen scannen</Text>
+        <Text style={styles.title}>Handleiding</Text>
 
         {/* Two buttons centered and same width */}
-        <View style={styles.buttonContainer}>
-          <TouchableOpacity style={styles.button}>
-            <Text style={styles.buttonText}>Scan een slang</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.button}>
-            <Text style={styles.buttonText}>Scan een aansluiting</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Display items stacked vertically with background color changes */}
-        <View style={styles.displayContainer}>
-          <Text style={[styles.displayItem, styles.greenBackground]}>
-            Koppeling 1
-          </Text>
-          <Text style={[styles.displayItem, styles.redBackground]}>
-            Koppeling 2
-          </Text>
-          <Text style={[styles.displayItem, styles.redBackground]}>
-            Koppeling 3
-          </Text>
-          <Text style={[styles.displayItem, styles.greenBackground]}>
-            Koppeling 4
-          </Text>
-        </View>
+        <View style={styles.buttonContainer}></View>
       </View>
     </View>
   );
@@ -88,12 +65,12 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
   },
+    boldText: {
+    fontWeight: "bold", // Add bold text style
+  },
   sidebarText: {
     fontSize: 16,
     color: "#333",
-  },
-  boldText: {
-    fontWeight: "bold", // Add bold text style
   },
   locationContainer: {
     paddingVertical: 20,

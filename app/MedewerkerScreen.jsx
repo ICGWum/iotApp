@@ -11,6 +11,11 @@ export default function MedewerkerScreen({ navigation }) {
           title="Ga naar Koppelen"
           onPress={() => navigation.navigate("Koppelen")}
         />
+
+        <Button
+          title="Logout"
+          onPress={() => navigation.navigate("Home")}
+        />
       </View>
   );
 }
