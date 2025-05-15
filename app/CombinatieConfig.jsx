@@ -12,16 +12,15 @@ import {
   Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
-import { db } from "./Firebase";
+import { db, deleteDocument } from "./Firebase";
 import {
   collection,
   getDocs,
+  query,
+  orderBy,
   doc,
   setDoc,
   updateDoc,
-  deleteDoc,
-  query,
-  orderBy,
 } from "firebase/firestore";
 import { showMessage } from "react-native-flash-message";
 
@@ -53,15 +52,15 @@ export default function CombinatieConfig() {
   const fetchCombinations = async () => {
     try {
       setLoading(true);
-      const combinationsSnapshot = await getDocs(
-        collection(db, COMBINATIONS_COLLECTION)
+      const q = query(
+        collection(db, COMBINATIONS_COLLECTION),
+        orderBy("createdAt", "desc")
       );
-
+      const combinationsSnapshot = await getDocs(q);
       const combinationsData = combinationsSnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-
       setCombinations(combinationsData);
     } catch (error) {
       console.error("Error fetching combinations:", error);
@@ -83,12 +82,10 @@ export default function CombinatieConfig() {
         orderBy("createdAt", "desc")
       );
       const tractorsSnapshot = await getDocs(q);
-
       const tractorsData = tractorsSnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-
       setTractors(tractorsData);
     } catch (error) {
       console.error("Error fetching tractors:", error);
@@ -108,12 +105,10 @@ export default function CombinatieConfig() {
         orderBy("createdAt", "desc")
       );
       const equipmentSnapshot = await getDocs(q);
-
       const equipmentData = equipmentSnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-
       setEquipment(equipmentData);
     } catch (error) {
       console.error("Error fetching equipment:", error);
@@ -125,14 +120,12 @@ export default function CombinatieConfig() {
     }
   };
 
-  // Load data when component mounts
   useEffect(() => {
     fetchCombinations();
     fetchTractors();
     fetchEquipment();
   }, []);
 
-  // Add useEffect to ensure navigation is available
   useEffect(() => {
     if (!navigation) return;
   }, [navigation]);
@@ -154,7 +147,6 @@ export default function CombinatieConfig() {
         collection(db, COMBINATIONS_COLLECTION)
       );
       let highestNumber = 0;
-
       querySnapshot.docs.forEach((document) => {
         const docId = document.id;
         if (docId.startsWith("combinatie-")) {
@@ -165,7 +157,6 @@ export default function CombinatieConfig() {
           }
         }
       });
-
       return `combinatie-${highestNumber + 1}`;
     } catch (error) {
       console.error("Error generating combination ID:", error);
@@ -191,38 +182,62 @@ export default function CombinatieConfig() {
     setModalVisible(true);
   };
 
-  // Delete combination
-  const handleDeleteCombination = (combination) => {
-    Alert.alert(
-      "Combinatie verwijderen",
-      `Weet je zeker dat je '${combination.name}' wilt verwijderen?`,
-      [
-        { text: "Annuleren", style: "cancel" },
-        {
-          text: "Verwijderen",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteDoc(doc(db, COMBINATIONS_COLLECTION, combination.id));
-              setCombinations((prev) =>
-                prev.filter((c) => c.id !== combination.id)
-              );
-              showMessage({
-                message: "Combinatie verwijderd",
-                type: "success",
-              });
-            } catch (error) {
-              console.error("Error deleting combination:", error);
-              showMessage({
-                message: "Fout bij verwijderen",
-                description: error.message,
-                type: "danger",
-              });
-            }
-          },
-        },
-      ]
+  // Delete combination using helper from Firebase.jsx
+  // const handleDeleteCombination = (combination) => {
+  //   Alert.alert(
+  //     "Combinatie verwijderen",
+  //     `Weet je zeker dat je '${combination.name}' wilt verwijderen?`,
+  //     [
+  //       { text: "Annuleren", style: "cancel" },
+  //       {
+  //         text: "Verwijderen",
+  //         style: "destructive",
+  //         onPress: async () => {
+  //           const result = await deleteDocument(
+  //             COMBINATIONS_COLLECTION,
+  //             combination.id
+  //           );
+  //           if (result.success) {
+  //             setCombinations((prev) =>
+  //               prev.filter((c) => c.id !== combination.id)
+  //             );
+  //             showMessage({
+  //               message: "Combinatie verwijderd",
+  //               type: "success",
+  //             });
+  //           } else {
+  //             showMessage({
+  //               message: "Fout bij verwijderen",
+  //               description: result.error.message,
+  //               type: "danger",
+  //             });
+  //           }
+  //         },
+  //       },
+  //     ]
+  //   );
+  // };
+
+  const handleDeleteCombination = async (combination) => {
+    const result = await deleteDocument(
+      COMBINATIONS_COLLECTION,
+      combination.id
     );
+    if (result.success) {
+      setCombinations((prev) =>
+        prev.filter((c) => c.id !== combination.id)
+      );
+      showMessage({
+        message: "Combinatie verwijderd",
+        type: "success",
+      });
+    } else {
+      showMessage({
+        message: "Fout bij verwijderen",
+        description: result.error.message,
+        type: "danger",
+      });
+    }
   };
 
   // Get tractor info
