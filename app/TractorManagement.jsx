@@ -9,20 +9,16 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
-  Alert,
 } from "react-native";
-import { db } from "./Firebase";
+import { db, deleteDocument } from "./Firebase";
 import {
   collection,
   getDocs,
-  addDoc,
   updateDoc,
-  deleteDoc,
-  doc,
-  setDoc,
   query,
   orderBy,
-  getDoc,
+  doc,
+  setDoc,
 } from "firebase/firestore";
 import { showMessage } from "react-native-flash-message";
 
@@ -47,10 +43,8 @@ export default function TractorManagement({ navigation }) {
   // Generate next tractor ID
   const generateNextTractorId = async () => {
     try {
-      // Get all documents and find the highest number
       const querySnapshot = await getDocs(collection(db, COLLECTION_NAME));
       let highestNumber = 0;
-
       querySnapshot.docs.forEach((document) => {
         const docId = document.id;
         if (docId.startsWith("tractor-")) {
@@ -61,8 +55,6 @@ export default function TractorManagement({ navigation }) {
           }
         }
       });
-
-      // Return next ID
       return `tractor-${highestNumber + 1}`;
     } catch (error) {
       console.error("Error generating tractor ID:", error);
@@ -79,12 +71,10 @@ export default function TractorManagement({ navigation }) {
         orderBy("createdAt", "desc")
       );
       const querySnapshot = await getDocs(q);
-
       const tractorList = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-
       setTractors(tractorList);
     } catch (error) {
       console.error("Error fetching tractors:", error);
@@ -98,7 +88,6 @@ export default function TractorManagement({ navigation }) {
     }
   };
 
-  // Load tractors when component mounts
   useEffect(() => {
     fetchTractors();
   }, []);
@@ -140,7 +129,6 @@ export default function TractorManagement({ navigation }) {
 
   // Save tractor (add new or update existing)
   const handleSaveTractor = async () => {
-    // Validate inputs
     if (!name || !brand || !model) {
       showMessage({
         message: "Verplichte velden ontbreken",
@@ -165,7 +153,6 @@ export default function TractorManagement({ navigation }) {
       };
 
       if (editMode && currentTractor) {
-        // Update existing tractor
         const tractorRef = doc(db, COLLECTION_NAME, currentTractor.id);
         await updateDoc(tractorRef, tractorData);
         showMessage({
@@ -173,7 +160,6 @@ export default function TractorManagement({ navigation }) {
           type: "success",
         });
       } else {
-        // Add new tractor with custom ID
         tractorData.createdAt = new Date();
         const newTractorId = await generateNextTractorId();
         const tractorRef = doc(db, COLLECTION_NAME, newTractorId);
@@ -197,30 +183,19 @@ export default function TractorManagement({ navigation }) {
     }
   };
 
-  // Simple UI-only delete function
-  const handleDeleteTractor = (tractor) => {
-    Alert.alert(
-      "Tractor verwijderen",
-      `Weet je zeker dat je ${tractor.name} wilt verwijderen uit de weergave?`,
-      [
-        { text: "Annuleren", style: "cancel" },
-        {
-          text: "Verwijderen uit weergave",
-          style: "destructive",
-          onPress: () => {
-            // Just update the UI by filtering out this tractor
-            setTractors((prev) => prev.filter((t) => t.id !== tractor.id));
-
-            showMessage({
-              message: "Tractor verwijderd uit weergave",
-              description:
-                "Het item is alleen uit de weergave verwijderd, niet uit de database.",
-              type: "success",
-            });
-          },
-        },
-      ]
-    );
+  // Delete tractor using helper from Firebase.jsx
+  const deleteTractor = async (tractorId) => {
+    const result = await deleteDocument(COLLECTION_NAME, tractorId);
+    if (result.success) {
+      setTractors((prev) => prev.filter((t) => t.id !== tractorId));
+      showMessage({ message: "Tractor verwijderd", type: "success" });
+    } else {
+      showMessage({
+        message: "Fout bij verwijderen",
+        description: result.error.message,
+        type: "danger",
+      });
+    }
   };
 
   // Render tractor item
@@ -246,7 +221,7 @@ export default function TractorManagement({ navigation }) {
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteTractor(item)}
+          onPress={() => deleteTractor(item.id)}
         >
           <Text style={styles.buttonText}>Verwijderen</Text>
         </TouchableOpacity>

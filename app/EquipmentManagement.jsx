@@ -11,18 +11,15 @@ import {
   ActivityIndicator,
   Alert,
 } from "react-native";
-import { db } from "./Firebase";
+import { db, deleteDocument } from "./Firebase";
 import {
   collection,
   getDocs,
-  addDoc,
   updateDoc,
-  deleteDoc,
   doc,
   setDoc,
   query,
   orderBy,
-  getDoc,
 } from "firebase/firestore";
 import { showMessage } from "react-native-flash-message";
 
@@ -47,10 +44,8 @@ export default function EquipmentManagement({ navigation }) {
   // Generate next equipment ID
   const generateNextEquipmentId = async () => {
     try {
-      // Get all documents and find the highest number
       const querySnapshot = await getDocs(collection(db, COLLECTION_NAME));
       let highestNumber = 0;
-
       querySnapshot.docs.forEach((document) => {
         const docId = document.id;
         if (docId.startsWith("werktuig-")) {
@@ -61,8 +56,6 @@ export default function EquipmentManagement({ navigation }) {
           }
         }
       });
-
-      // Return next ID
       return `werktuig-${highestNumber + 1}`;
     } catch (error) {
       console.error("Error generating equipment ID:", error);
@@ -79,12 +72,10 @@ export default function EquipmentManagement({ navigation }) {
         orderBy("createdAt", "desc")
       );
       const querySnapshot = await getDocs(q);
-
       const equipmentList = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
       }));
-
       setEquipment(equipmentList);
     } catch (error) {
       console.error("Error fetching equipment:", error);
@@ -98,7 +89,6 @@ export default function EquipmentManagement({ navigation }) {
     }
   };
 
-  // Load equipment when component mounts
   useEffect(() => {
     fetchEquipment();
   }, []);
@@ -140,7 +130,6 @@ export default function EquipmentManagement({ navigation }) {
 
   // Save equipment (add new or update existing)
   const handleSaveEquipment = async () => {
-    // Validate inputs
     if (!name || !type) {
       showMessage({
         message: "Verplichte velden ontbreken",
@@ -165,7 +154,6 @@ export default function EquipmentManagement({ navigation }) {
       };
 
       if (editMode && currentEquipment) {
-        // Update existing equipment
         const equipmentRef = doc(db, COLLECTION_NAME, currentEquipment.id);
         await updateDoc(equipmentRef, equipmentData);
         showMessage({
@@ -173,7 +161,6 @@ export default function EquipmentManagement({ navigation }) {
           type: "success",
         });
       } else {
-        // Add new equipment with custom ID
         equipmentData.createdAt = new Date();
         const newEquipmentId = await generateNextEquipmentId();
         const equipmentRef = doc(db, COLLECTION_NAME, newEquipmentId);
@@ -197,30 +184,52 @@ export default function EquipmentManagement({ navigation }) {
     }
   };
 
-  // Simple UI-only delete function
-  const handleDeleteEquipment = (equipment) => {
-    Alert.alert(
-      "Werktuig verwijderen",
-      `Weet je zeker dat je ${equipment.name} wilt verwijderen uit de weergave?`,
-      [
-        { text: "Annuleren", style: "cancel" },
-        {
-          text: "Verwijderen uit weergave",
-          style: "destructive",
-          onPress: () => {
-            // Just update the UI by filtering out this equipment
-            setEquipment((prev) => prev.filter((e) => e.id !== equipment.id));
+  // Delete equipment using helper from Firebase.jsx
+  // const handleDeleteEquipment = (equipment) => {
+  //   Alert.alert(
+  //     "Werktuig verwijderen",
+  //     `Weet je zeker dat je ${equipment.name} wilt verwijderen?`,
+  //     [
+  //       { text: "Annuleren", style: "cancel" },
+  //       {
+  //         text: "Verwijderen",
+  //         style: "destructive",
+  //         onPress: async () => {
+  //           const result = await deleteDocument(COLLECTION_NAME, equipment.id);
+  //           if (result.success) {
+  //             setEquipment((prev) => prev.filter((e) => e.id !== equipment.id));
+  //             showMessage({
+  //               message: "Werktuig verwijderd",
+  //               type: "success",
+  //             });
+  //           } else {
+  //             showMessage({
+  //               message: "Fout bij verwijderen",
+  //               description: result.error.message,
+  //               type: "danger",
+  //             });
+  //           }
+  //         },
+  //       },
+  //     ]
+  //   );
+  // };
 
-            showMessage({
-              message: "Werktuig verwijderd uit weergave",
-              description:
-                "Het item is alleen uit de weergave verwijderd, niet uit de database.",
-              type: "success",
-            });
-          },
-        },
-      ]
-    );
+  const handleDeleteEquipment = async (equipment) => {
+    const result = await deleteDocument(COLLECTION_NAME, equipment.id);
+    if (result.success) {
+      setEquipment((prev) => prev.filter((e) => e.id !== equipment.id));
+      showMessage({
+        message: "Werktuig verwijderd",
+        type: "success",
+      });
+    } else {
+      showMessage({
+        message: "Fout bij verwijderen",
+        description: result.error.message,
+        type: "danger",
+      });
+    }
   };
 
   // Render equipment item
