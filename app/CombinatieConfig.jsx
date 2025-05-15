@@ -11,6 +11,7 @@ import {
   TextInput,
   Alert,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
 import { db } from "./Firebase";
 import {
   collection,
@@ -29,6 +30,7 @@ const TRACTORS_COLLECTION = "tractors";
 const EQUIPMENT_COLLECTION = "equipment";
 
 export default function CombinatieConfig() {
+  const navigation = useNavigation();
   const [combinations, setCombinations] = useState([]);
   const [tractors, setTractors] = useState([]);
   const [equipment, setEquipment] = useState([]);
@@ -42,6 +44,10 @@ export default function CombinatieConfig() {
   const [combinationDescription, setCombinationDescription] = useState("");
   const [tractorModalVisible, setTractorModalVisible] = useState(false);
   const [equipmentModalVisible, setEquipmentModalVisible] = useState(false);
+  const [connectionMappingModalVisible, setConnectionMappingModalVisible] =
+    useState(false);
+  const [currentMappingEquipment, setCurrentMappingEquipment] = useState(null);
+  const [connectionMappings, setConnectionMappings] = useState({});
 
   // Fetch all combinations
   const fetchCombinations = async () => {
@@ -126,6 +132,11 @@ export default function CombinatieConfig() {
     fetchEquipment();
   }, []);
 
+  // Add useEffect to ensure navigation is available
+  useEffect(() => {
+    if (!navigation) return;
+  }, [navigation]);
+
   // Reset form fields
   const resetForm = () => {
     setSelectedTractorId(null);
@@ -175,6 +186,7 @@ export default function CombinatieConfig() {
     setCombinationDescription(combination.description || "");
     setSelectedTractorId(combination.tractorId || null);
     setSelectedEquipmentIds(combination.equipmentIds || []);
+    setConnectionMappings(combination.connectionMappings || {});
     setEditMode(true);
     setModalVisible(true);
   };
@@ -225,7 +237,48 @@ export default function CombinatieConfig() {
     return equip || null;
   };
 
-  // Toggle equipment selection
+  // Add helper function to generate connection arrays
+  const generateConnectionNumbers = (count) => {
+    return Array.from({ length: count }, (_, i) => i + 1);
+  };
+
+  // Add function to handle connection mapping
+  const handleConnectionMapping = (tractorConnection, werktuigConnection) => {
+    if (!currentMappingEquipment) return;
+
+    setConnectionMappings((prev) => {
+      const equipmentId = currentMappingEquipment.id;
+      const currentEquipmentMappings = prev[equipmentId] || {};
+
+      // Check if this tractor connection is already mapped to another werktuig connection
+      const existingTractorMapping = Object.entries(
+        currentEquipmentMappings
+      ).find(([_, value]) => value === tractorConnection);
+
+      // Check if this werktuig connection is already mapped to another tractor connection
+      const isWerktuigAlreadyMapped =
+        currentEquipmentMappings[werktuigConnection];
+
+      // If either connection is already mapped, remove the existing mapping
+      if (existingTractorMapping) {
+        delete currentEquipmentMappings[existingTractorMapping[0]];
+      }
+      if (isWerktuigAlreadyMapped) {
+        delete currentEquipmentMappings[werktuigConnection];
+      }
+
+      // Add the new mapping
+      return {
+        ...prev,
+        [equipmentId]: {
+          ...currentEquipmentMappings,
+          [werktuigConnection]: tractorConnection,
+        },
+      };
+    });
+  };
+
+  // Modify the toggleEquipmentSelection function
   const toggleEquipmentSelection = (equipmentId) => {
     const equipment = getEquipmentInfo(equipmentId);
     const tractor = getTractorInfo(selectedTractorId);
@@ -242,8 +295,20 @@ export default function CombinatieConfig() {
       return;
     }
 
+    if (!selectedEquipmentIds.includes(equipmentId)) {
+      // When adding new equipment, show the mapping modal
+      setCurrentMappingEquipment(equipment);
+      setConnectionMappingModalVisible(true);
+    }
+
     setSelectedEquipmentIds((prev) => {
       if (prev.includes(equipmentId)) {
+        // When removing equipment, clear its mappings
+        setConnectionMappings((prevMappings) => {
+          const newMappings = { ...prevMappings };
+          delete newMappings[equipmentId];
+          return newMappings;
+        });
         return prev.filter((id) => id !== equipmentId);
       } else {
         return [...prev, equipmentId];
@@ -276,6 +341,7 @@ export default function CombinatieConfig() {
         description: combinationDescription,
         tractorId: selectedTractorId,
         equipmentIds: selectedEquipmentIds,
+        connectionMappings,
         updatedAt: new Date(),
       };
 
@@ -356,10 +422,28 @@ export default function CombinatieConfig() {
           {item.equipmentIds && item.equipmentIds.length > 0 ? (
             item.equipmentIds.map((equipId) => {
               const equip = getEquipmentInfo(equipId);
+              const mappings = item.connectionMappings?.[equipId] || {};
               return equip ? (
-                <Text key={equipId} style={styles.equipmentItem}>
-                  • {equip.name} ({equip.type})
-                </Text>
+                <View key={equipId} style={styles.equipmentItemContainer}>
+                  <Text style={styles.equipmentItem}>
+                    • {equip.name} ({equip.type})
+                  </Text>
+                  {Object.entries(mappings).length > 0 && (
+                    <View style={styles.connectionsList}>
+                      <Text style={styles.connectionsTitle}>Koppelingen:</Text>
+                      {Object.entries(mappings).map(
+                        ([werktuigConn, tractorConn]) => (
+                          <Text
+                            key={werktuigConn}
+                            style={styles.connectionItem}
+                          >
+                            Tractor {tractorConn} ←→ Werktuig {werktuigConn}
+                          </Text>
+                        )
+                      )}
+                    </View>
+                  )}
+                </View>
               ) : null;
             })
           ) : (
@@ -448,6 +532,134 @@ export default function CombinatieConfig() {
     );
   };
 
+  // Update the connection mapping modal component
+  const renderConnectionMappingModal = () => {
+    if (!currentMappingEquipment || !selectedTractorId) return null;
+
+    const tractor = getTractorInfo(selectedTractorId);
+    const tractorConnections = generateConnectionNumbers(
+      tractor.aantalKoppelingen
+    );
+    const werktuigConnections = generateConnectionNumbers(
+      currentMappingEquipment.aantalKoppelingen
+    );
+    const currentMappings =
+      connectionMappings[currentMappingEquipment.id] || {};
+
+    return (
+      <Modal
+        visible={connectionMappingModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setConnectionMappingModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <View style={styles.mappingHeaderContainer}>
+              <Text style={styles.modalTitle}>Koppel de aansluitingen</Text>
+              <Text style={styles.subtitle}>
+                {currentMappingEquipment.name} - {tractor.name}
+              </Text>
+
+              <View style={styles.mappingLegend}>
+                <View style={styles.legendItem}>
+                  <View style={styles.legendDot} />
+                  <Text>Niet gekoppeld</Text>
+                </View>
+                <View style={styles.legendItem}>
+                  <View
+                    style={[styles.legendDot, { backgroundColor: "#2196F3" }]}
+                  />
+                  <Text>Gekoppeld</Text>
+                </View>
+              </View>
+            </View>
+
+            <ScrollView
+              style={styles.mappingContainer}
+              showsVerticalScrollIndicator={true}
+              contentContainerStyle={styles.mappingContentContainer}
+            >
+              {werktuigConnections.map((werktuigConn) => {
+                const mappedTractorConn = currentMappings[werktuigConn];
+                return (
+                  <View key={werktuigConn} style={styles.mappingRow}>
+                    <View style={styles.mappingWerktuig}>
+                      <Text style={styles.mappingLabel}>Werktuig</Text>
+                      <View
+                        style={[
+                          styles.connectionBadge,
+                          mappedTractorConn && styles.connectionBadgeMapped,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.connectionNumber,
+                            mappedTractorConn && styles.connectionNumberMapped,
+                          ]}
+                        >
+                          {werktuigConn}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <View style={styles.mappingArrowContainer}>
+                      <Text style={styles.mappingArrow}>←→</Text>
+                    </View>
+
+                    <View style={styles.mappingTractor}>
+                      <Text style={styles.mappingLabel}>Tractor</Text>
+                      <View style={styles.tractorConnectionsGrid}>
+                        {tractorConnections.map((tractorConn) => (
+                          <TouchableOpacity
+                            key={tractorConn}
+                            style={[
+                              styles.tractorConnectionButton,
+                              currentMappings[werktuigConn] === tractorConn &&
+                                styles.tractorConnectionButtonSelected,
+                              // Dim if this tractor connection is used by another werktuig connection
+                              Object.values(currentMappings).includes(
+                                tractorConn
+                              ) &&
+                                currentMappings[werktuigConn] !== tractorConn &&
+                                styles.tractorConnectionButtonUsed,
+                            ]}
+                            onPress={() =>
+                              handleConnectionMapping(tractorConn, werktuigConn)
+                            }
+                          >
+                            <Text
+                              style={[
+                                styles.tractorConnectionNumber,
+                                currentMappings[werktuigConn] === tractorConn &&
+                                  styles.tractorConnectionNumberSelected,
+                              ]}
+                            >
+                              {tractorConn}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={() => setConnectionMappingModalVisible(false)}
+              >
+                <Text style={styles.buttonText}>Gereed</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
   if (loading && combinations.length === 0) {
     return (
       <View style={styles.centered}>
@@ -480,6 +692,10 @@ export default function CombinatieConfig() {
           renderItem={renderCombinationItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          showsVerticalScrollIndicator={true}
+          initialNumToRender={5}
+          maxToRenderPerBatch={10}
+          windowSize={5}
         />
       )}
 
@@ -652,6 +868,8 @@ export default function CombinatieConfig() {
           </View>
         </View>
       </Modal>
+
+      {renderConnectionMappingModal()}
     </View>
   );
 }
@@ -674,20 +892,25 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#ddd",
+    flexWrap: "wrap",
+    gap: 8,
   },
   title: {
     fontSize: 20,
     fontWeight: "bold",
+    flex: 1,
   },
   addButton: {
     backgroundColor: "#4CAF50",
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 4,
+    alignSelf: "flex-start",
   },
   buttonText: {
     color: "#fff",
     fontWeight: "bold",
+    fontSize: 14,
   },
   list: {
     padding: 16,
@@ -779,7 +1002,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 20,
     width: "100%",
-    maxHeight: "80%",
+    maxHeight: "90%",
+    flex: 1,
   },
   modalTitle: {
     fontSize: 20,
@@ -842,15 +1066,16 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-end",
     marginTop: 16,
+    gap: 8,
   },
   modalButton: {
-    flex: 1,
-    padding: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 4,
     alignItems: "center",
-    marginHorizontal: 8,
+    minWidth: 100,
   },
   cancelButton: {
     backgroundColor: "#9E9E9E",
@@ -910,5 +1135,122 @@ const styles = StyleSheet.create({
     color: "#f44336",
     fontSize: 12,
     marginTop: 4,
+  },
+  subtitle: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  mappingContainer: {
+    flex: 1,
+    minHeight: 100,
+    marginBottom: 16,
+  },
+  mappingLegend: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginBottom: 15,
+    gap: 20,
+  },
+  legendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  legendDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: "#f5f5f5",
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  mappingRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 20,
+    paddingHorizontal: 10,
+  },
+  mappingWerktuig: {
+    flex: 1,
+    alignItems: "center",
+  },
+  mappingArrowContainer: {
+    flex: 0.5,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingTop: 25,
+  },
+  mappingTractor: {
+    flex: 2,
+    alignItems: "center",
+  },
+  mappingLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+    color: "#666",
+  },
+  connectionBadge: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5f5f5",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  connectionBadgeMapped: {
+    backgroundColor: "#2196F3",
+    borderColor: "#1976D2",
+  },
+  connectionNumber: {
+    fontSize: 18,
+    color: "#666",
+  },
+  connectionNumberMapped: {
+    color: "#fff",
+  },
+  tractorConnectionsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-start",
+    gap: 8,
+    maxWidth: 200,
+  },
+  tractorConnectionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#f5f5f5",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  tractorConnectionButtonSelected: {
+    backgroundColor: "#2196F3",
+    borderColor: "#1976D2",
+  },
+  tractorConnectionButtonUsed: {
+    opacity: 0.5,
+  },
+  tractorConnectionNumber: {
+    fontSize: 16,
+    color: "#666",
+  },
+  tractorConnectionNumberSelected: {
+    color: "#fff",
+  },
+  mappingArrow: {
+    fontSize: 24,
+    color: "#666",
+  },
+  mappingHeaderContainer: {
+    marginBottom: 16,
+  },
+  mappingContentContainer: {
+    paddingBottom: 16,
   },
 });
