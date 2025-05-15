@@ -2,6 +2,7 @@
 
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth"; // Import Firebase Authentication
+import { getFirestore, deleteDoc, doc } from "firebase/firestore"; // Import Firestore
 
 const firebaseConfig = {
   apiKey: "AIzaSyBcXSf-sWWV5apE4p4nTX8Kk-1P6GHkDH8",
@@ -19,5 +20,20 @@ const app = initializeApp(firebaseConfig);
 // Initialize Firebase Authentication
 const auth = getAuth(app);
 
-export { auth };
+// Initialize Firestore
+const db = getFirestore(app);
+
+// Simple function to delete a document
+const deleteDocument = async (collectionName, docId) => {
+  try {
+    const docRef = doc(db, collectionName, docId);
+    await deleteDoc(docRef);
+    return { success: true };
+  } catch (error) {
+    console.error(`Error deleting document:`, error);
+    return { success: false, error };
+  }
+};
+
+export { auth, db, deleteDocument };
 export default app;

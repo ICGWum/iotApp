@@ -1,11 +1,20 @@
 import React, { useState } from "react";
-import { View, TextInput, Button, Text, StyleSheet, Alert, KeyboardAvoidingView, Platform } from "react-native";
+import {
+  View,
+  TextInput,
+  Button,
+  Text,
+  StyleSheet,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+} from "react-native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { SafeAreaView } from "react-native";
-import FlashMessage from "react-native-flash-message";
+import FlashMessage, { showMessage } from "react-native-flash-message";
 
 import MedewerkerScreen from "./MedewerkerScreen";
 import AdministratorScreen from "./AdministratorScreen";
@@ -13,6 +22,9 @@ import KoppelenScreen from "./KoppelenScreen";
 import CombinatieConfig from "./CombinatieConfig";
 import Banner from "./Banner";
 import KoppelingTutorial from "./KoppelingTutorial";
+import test_firestore from "./test_firestore";
+import TractorManagement from "./TractorManagement";
+import EquipmentManagement from "./EquipmentManagement";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -70,13 +82,13 @@ function HomeScreen({ navigation }) {
   return (
     <SafeAreaView style={{ flex: 1 }}>
       <View style={{ flex: 1 }}>
-        <Banner /> 
+        <Banner />
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.buttonContainer}
         >
-          <Text style={styles.signInText}>Inloggen</Text> 
-          
+          <Text style={styles.signInText}>Inloggen</Text>
+
           <TextInput
             style={styles.input}
             placeholder="Email"
@@ -92,12 +104,12 @@ function HomeScreen({ navigation }) {
             onChangeText={setPassword}
             secureTextEntry
           />
-          
+
           <View style={styles.buttonWrapper}>
             <Button title="Login" onPress={handleLogin} />
           </View>
         </KeyboardAvoidingView>
-        
+
         <View style={styles.bannerBottom}>
           <Text style={styles.footerText}>© 2025 Team B2</Text>
         </View>
@@ -108,44 +120,65 @@ function HomeScreen({ navigation }) {
 
 export default function App() {
   return (
-    <Stack.Navigator
-      initialRouteName="Home"
-      screenOptions={{
-        headerBackTitleVisible: false, // Hide back button title
-      }}
-    >
-      {/* Define all screens in the navigation stack */}
-      <Stack.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ headerShown: false }} // Hide header for Home screen
-      />
-      <Stack.Screen
-        name="Medewerker"
-        component={MedewerkerScreen}
-        options={{ headerShown: true, headerTitle: "Medewerker" }}
-      />
-      <Stack.Screen
-        name="Administrator"
-        component={AdministratorScreen}
-        options={{ headerShown: true, headerTitle: "Administrator" }}
-      />
-      <Stack.Screen
-        name="Koppelen"
-        component={KoppelenScreen}
-        options={{ headerShown: true, headerTitle: "Koppelen" }}
-      />
-      <Stack.Screen
-        name="CombinatieConfig"
-        component={CombinatieConfig}
-        options={{ headerShown: true, headerTitle: "Combinatie Config" }}
-      />
-      <Stack.Screen
-        name="KoppelingTutorial"
-        component={KoppelingTutorial}
-        options={{ headerShown: true, headerTitle: "Koppeling Tutorial" }}
-      />
-    </Stack.Navigator>
+    <>
+      <Stack.Navigator
+        initialRouteName="Home"
+        screenOptions={{
+          headerBackTitleVisible: false, // Hide back button title
+        }}
+      >
+        {/* Define all screens in the navigation stack */}
+        <Stack.Screen
+          name="Home"
+          component={HomeScreen}
+          options={{ headerShown: false }} // Hide header for Home screen
+        />
+        <Stack.Screen
+          name="Medewerker"
+          component={MedewerkerScreen}
+          options={{ headerShown: true, headerTitle: "Medewerker" }}
+        />
+        <Stack.Screen
+          name="Administrator"
+          component={AdministratorScreen}
+          options={{ headerShown: true, headerTitle: "Beheerder" }}
+        />
+        <Stack.Screen
+          name="Koppelen"
+          component={KoppelenScreen}
+          options={{ headerShown: true, headerTitle: "Koppelen" }}
+        />
+        <Stack.Screen
+          name="CombinatieConfig"
+          component={CombinatieConfig}
+          options={{
+            headerShown: true,
+            headerTitle: "Combinatie Configuratie",
+          }}
+        />
+        <Stack.Screen
+          name="KoppelingTutorial"
+          component={KoppelingTutorial}
+          options={{ headerShown: true, headerTitle: "Koppeling Tutorial" }}
+        />
+        <Stack.Screen
+          name="test_firestore"
+          component={test_firestore}
+          options={{ headerShown: true, headerTitle: "Test Firestore" }}
+        />
+        <Stack.Screen
+          name="TractorManagement"
+          component={TractorManagement}
+          options={{ headerShown: true, headerTitle: "Tractorbeheer" }}
+        />
+        <Stack.Screen
+          name="EquipmentManagement"
+          component={EquipmentManagement}
+          options={{ headerShown: true, headerTitle: "Werktuigbeheer" }}
+        />
+      </Stack.Navigator>
+      <FlashMessage position="top" />
+    </>
   );
 }
 
