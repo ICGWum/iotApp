@@ -227,6 +227,21 @@ export default function CombinatieConfig() {
 
   // Toggle equipment selection
   const toggleEquipmentSelection = (equipmentId) => {
+    const equipment = getEquipmentInfo(equipmentId);
+    const tractor = getTractorInfo(selectedTractorId);
+
+    if (!equipment || !tractor) return;
+
+    // Check if the werktuig doesn't require more connections than the tractor has
+    if (equipment.aantalKoppelingen > tractor.aantalKoppelingen) {
+      showMessage({
+        message: "Te veel koppelingen benodigd",
+        description: `Het werktuig heeft ${equipment.aantalKoppelingen} koppelingen nodig, maar de tractor heeft er maar ${tractor.aantalKoppelingen}`,
+        type: "warning",
+      });
+      return;
+    }
+
     setSelectedEquipmentIds((prev) => {
       if (prev.includes(equipmentId)) {
         return prev.filter((id) => id !== equipmentId);
@@ -390,33 +405,48 @@ export default function CombinatieConfig() {
   );
 
   // Render equipment selection item
-  const renderEquipmentItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.selectionItem,
-        selectedEquipmentIds.includes(item.id) && styles.selectedItem,
-      ]}
-      onPress={() => toggleEquipmentSelection(item.id)}
-    >
-      <View style={styles.selectionItemContent}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text>Type: {item.type}</Text>
-        {item.brand && <Text>Merk: {item.brand}</Text>}
-      </View>
-      <View style={styles.checkboxContainer}>
-        <View
-          style={[
-            styles.checkbox,
-            selectedEquipmentIds.includes(item.id) && styles.checkboxSelected,
-          ]}
-        >
-          {selectedEquipmentIds.includes(item.id) && (
-            <Text style={styles.checkmark}>✓</Text>
+  const renderEquipmentItem = ({ item }) => {
+    const tractor = getTractorInfo(selectedTractorId);
+    const isCompatible =
+      tractor && item.aantalKoppelingen <= tractor.aantalKoppelingen;
+    const incompatibleStyle = !isCompatible ? { opacity: 0.5 } : {};
+
+    return (
+      <TouchableOpacity
+        style={[
+          styles.selectionItem,
+          selectedEquipmentIds.includes(item.id) && styles.selectedItem,
+          incompatibleStyle,
+        ]}
+        onPress={() => toggleEquipmentSelection(item.id)}
+      >
+        <View style={styles.selectionItemContent}>
+          <Text style={styles.itemName}>{item.name}</Text>
+          <Text>Type: {item.type}</Text>
+          {item.brand && <Text>Merk: {item.brand}</Text>}
+          <Text>Aantal koppelingen: {item.aantalKoppelingen}</Text>
+          {!isCompatible && tractor && (
+            <Text style={styles.warningText}>
+              Niet compatibel - Werktuig heeft {item.aantalKoppelingen}{" "}
+              koppelingen nodig, tractor heeft er {tractor.aantalKoppelingen}
+            </Text>
           )}
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+        <View style={styles.checkboxContainer}>
+          <View
+            style={[
+              styles.checkbox,
+              selectedEquipmentIds.includes(item.id) && styles.checkboxSelected,
+            ]}
+          >
+            {selectedEquipmentIds.includes(item.id) && (
+              <Text style={styles.checkmark}>✓</Text>
+            )}
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (loading && combinations.length === 0) {
     return (
@@ -875,5 +905,10 @@ const styles = StyleSheet.create({
   emptySelectionList: {
     padding: 20,
     alignItems: "center",
+  },
+  warningText: {
+    color: "#f44336",
+    fontSize: 12,
+    marginTop: 4,
   },
 });

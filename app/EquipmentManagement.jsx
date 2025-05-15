@@ -40,7 +40,9 @@ export default function EquipmentManagement({ navigation }) {
   const [type, setType] = useState("");
   const [brand, setBrand] = useState("");
   const [serialNumber, setSerialNumber] = useState("");
-  const [workingWidth, setWorkingWidth] = useState("");
+  const [debiet, setDebiet] = useState("");
+  const [druk, setDruk] = useState("");
+  const [aantalKoppelingen, setAantalKoppelingen] = useState("");
 
   // Generate next equipment ID
   const generateNextEquipmentId = async () => {
@@ -107,7 +109,9 @@ export default function EquipmentManagement({ navigation }) {
     setType("");
     setBrand("");
     setSerialNumber("");
-    setWorkingWidth("");
+    setDebiet("");
+    setDruk("");
+    setAantalKoppelingen("");
     setCurrentEquipment(null);
     setEditMode(false);
   };
@@ -125,8 +129,10 @@ export default function EquipmentManagement({ navigation }) {
     setType(equipment.type || "");
     setBrand(equipment.brand || "");
     setSerialNumber(equipment.serialNumber || "");
-    setWorkingWidth(
-      equipment.workingWidth ? equipment.workingWidth.toString() : ""
+    setDebiet(equipment.debiet ? equipment.debiet.toString() : "");
+    setDruk(equipment.druk ? equipment.druk.toString() : "");
+    setAantalKoppelingen(
+      equipment.aantalKoppelingen ? equipment.aantalKoppelingen.toString() : ""
     );
     setEditMode(true);
     setModalVisible(true);
@@ -150,7 +156,11 @@ export default function EquipmentManagement({ navigation }) {
         type,
         brand,
         serialNumber,
-        workingWidth: workingWidth ? parseFloat(workingWidth) : null,
+        debiet: debiet ? parseFloat(debiet) : null,
+        druk: druk ? parseFloat(druk) : null,
+        aantalKoppelingen: aantalKoppelingen
+          ? parseInt(aantalKoppelingen)
+          : null,
         updatedAt: new Date(),
       };
 
@@ -221,7 +231,11 @@ export default function EquipmentManagement({ navigation }) {
         <Text>Type: {item.type}</Text>
         {item.brand && <Text>Merk: {item.brand}</Text>}
         {item.serialNumber && <Text>Serienummer: {item.serialNumber}</Text>}
-        {item.workingWidth && <Text>Werkbreedte: {item.workingWidth} m</Text>}
+        {item.debiet && <Text>Debiet: {item.debiet} l/min</Text>}
+        {item.druk && <Text>Druk: {item.druk} bar</Text>}
+        {item.aantalKoppelingen && (
+          <Text>Aantal koppelingen: {item.aantalKoppelingen}</Text>
+        )}
       </View>
       <View style={styles.equipmentActions}>
         <TouchableOpacity
@@ -320,15 +334,33 @@ export default function EquipmentManagement({ navigation }) {
                 style={styles.input}
                 value={serialNumber}
                 onChangeText={setSerialNumber}
-                placeholder="Voer serienummer in"
+                placeholder="e.g. xxxx-xxxx-xxxx-xxxx"
               />
 
-              <Text style={styles.inputLabel}>Werkbreedte (m)</Text>
+              <Text style={styles.inputLabel}>Debiet (l/min)</Text>
               <TextInput
                 style={styles.input}
-                value={workingWidth}
-                onChangeText={setWorkingWidth}
-                placeholder="Voer werkbreedte in meters in"
+                value={debiet}
+                onChangeText={setDebiet}
+                placeholder="Voer debiet in l/min in"
+                keyboardType="numeric"
+              />
+
+              <Text style={styles.inputLabel}>Druk (bar)</Text>
+              <TextInput
+                style={styles.input}
+                value={druk}
+                onChangeText={setDruk}
+                placeholder="Voer druk in bar in"
+                keyboardType="numeric"
+              />
+
+              <Text style={styles.inputLabel}>Aantal koppelingen</Text>
+              <TextInput
+                style={styles.input}
+                value={aantalKoppelingen}
+                onChangeText={setAantalKoppelingen}
+                placeholder="Voer aantal koppelingen in"
                 keyboardType="numeric"
               />
             </ScrollView>

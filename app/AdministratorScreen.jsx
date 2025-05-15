@@ -44,17 +44,7 @@ export default function AdministratorScreen({ navigation }) {
         >
           <Text style={styles.menuTitle}>Combinatie Configuratie</Text>
           <Text style={styles.menuDescription}>
-            Configureer systeemcombinaties
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.menuItem}
-          onPress={() => navigation.navigate("test_firestore")}
-        >
-          <Text style={styles.menuTitle}>Test Firestore</Text>
-          <Text style={styles.menuDescription}>
-            Test Firestore functionaliteit
+            Configureer tractorcombinaties
           </Text>
         </TouchableOpacity>
       </ScrollView>

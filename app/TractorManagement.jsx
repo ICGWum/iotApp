@@ -42,6 +42,7 @@ export default function TractorManagement({ navigation }) {
   const [serialNumber, setSerialNumber] = useState("");
   const [power, setPower] = useState("");
   const [year, setYear] = useState("");
+  const [aantalKoppelingen, setAantalKoppelingen] = useState("");
 
   // Generate next tractor ID
   const generateNextTractorId = async () => {
@@ -110,6 +111,7 @@ export default function TractorManagement({ navigation }) {
     setSerialNumber("");
     setPower("");
     setYear("");
+    setAantalKoppelingen("");
     setCurrentTractor(null);
     setEditMode(false);
   };
@@ -129,6 +131,9 @@ export default function TractorManagement({ navigation }) {
     setSerialNumber(tractor.serialNumber || "");
     setPower(tractor.power ? tractor.power.toString() : "");
     setYear(tractor.year ? tractor.year.toString() : "");
+    setAantalKoppelingen(
+      tractor.aantalKoppelingen ? tractor.aantalKoppelingen.toString() : ""
+    );
     setEditMode(true);
     setModalVisible(true);
   };
@@ -153,6 +158,9 @@ export default function TractorManagement({ navigation }) {
         serialNumber,
         power: power ? parseInt(power) : null,
         year: year ? parseInt(year) : null,
+        aantalKoppelingen: aantalKoppelingen
+          ? parseInt(aantalKoppelingen)
+          : null,
         updatedAt: new Date(),
       };
 
@@ -225,6 +233,9 @@ export default function TractorManagement({ navigation }) {
         {item.serialNumber && <Text>Serienummer: {item.serialNumber}</Text>}
         {item.power && <Text>Vermogen: {item.power} pk</Text>}
         {item.year && <Text>Bouwjaar: {item.year}</Text>}
+        {item.aantalKoppelingen && (
+          <Text>Aantal koppelingen: {item.aantalKoppelingen}</Text>
+        )}
       </View>
       <View style={styles.tractorActions}>
         <TouchableOpacity
@@ -304,7 +315,7 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={brand}
                 onChangeText={setBrand}
-                placeholder="Voer merk in"
+                placeholder="e.g. John Deere, Fendt, New Holland"
               />
 
               <Text style={styles.inputLabel}>Model *</Text>
@@ -312,7 +323,7 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={model}
                 onChangeText={setModel}
-                placeholder="Voer model in"
+                placeholder="e.g. 6120R, 724 Vario"
               />
 
               <Text style={styles.inputLabel}>Serienummer</Text>
@@ -320,7 +331,7 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={serialNumber}
                 onChangeText={setSerialNumber}
-                placeholder="Voer serienummer in"
+                placeholder="e.g. xxxx-xxxx-xxxx-xxxx"
               />
 
               <Text style={styles.inputLabel}>Vermogen (pk)</Text>
@@ -328,7 +339,7 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={power}
                 onChangeText={setPower}
-                placeholder="Voer vermogen in pk in"
+                placeholder="e.g. 120"
                 keyboardType="numeric"
               />
 
@@ -337,7 +348,16 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={year}
                 onChangeText={setYear}
-                placeholder="Voer bouwjaar in"
+                placeholder="e.g. 2012"
+                keyboardType="numeric"
+              />
+
+              <Text style={styles.inputLabel}>Aantal koppelingen</Text>
+              <TextInput
+                style={styles.input}
+                value={aantalKoppelingen}
+                onChangeText={setAantalKoppelingen}
+                placeholder="e.g. 4"
                 keyboardType="numeric"
               />
             </ScrollView>
