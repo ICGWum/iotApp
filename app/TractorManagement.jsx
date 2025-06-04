@@ -21,6 +21,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { showMessage } from "react-native-flash-message";
+import NfcManager, { NfcTech } from "react-native-nfc-manager";
 
 const COLLECTION_NAME = "tractors";
 
@@ -31,7 +32,6 @@ export default function TractorManagement({ navigation }) {
   const [editMode, setEditMode] = useState(false);
   const [currentTractor, setCurrentTractor] = useState(null);
 
-  // Form fields
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");
@@ -39,8 +39,13 @@ export default function TractorManagement({ navigation }) {
   const [power, setPower] = useState("");
   const [year, setYear] = useState("");
   const [aantalKoppelingen, setAantalKoppelingen] = useState("");
+  const [tags, setTags] = useState({});
 
-  // Generate next tractor ID
+  const [scanModalVisible, setScanModalVisible] = useState(false);
+  const [scanningIndex, setScanningIndex] = useState(1); // current koppeling being scanned (start at 1)
+  const [scannedTags, setScannedTags] = useState({}); // temp storage for scanned NFC ids
+  const [scanTargetTractor, setScanTargetTractor] = useState(null); // tractor being scanned
+
   const generateNextTractorId = async () => {
     try {
       const querySnapshot = await getDocs(collection(db, COLLECTION_NAME));
@@ -62,7 +67,6 @@ export default function TractorManagement({ navigation }) {
     }
   };
 
-  // Fetch all tractors from Firestore
   const fetchTractors = async () => {
     try {
       setLoading(true);
@@ -92,7 +96,28 @@ export default function TractorManagement({ navigation }) {
     fetchTractors();
   }, []);
 
-  // Reset form fields
+  useEffect(() => {
+    const koppelingen = parseInt(aantalKoppelingen);
+    if (!isNaN(koppelingen) && koppelingen > 0) {
+      setTags((prevTags) => {
+        const updatedTags = { ...prevTags };
+        // Start at 1 instead of 0
+        for (let i = 1; i <= koppelingen; i++) {
+          if (!(i in updatedTags)) {
+            updatedTags[i] = "";
+          }
+        }
+        // Remove tags above the current count
+        Object.keys(updatedTags).forEach((key) => {
+          if (parseInt(key) > koppelingen) delete updatedTags[key];
+        });
+        return updatedTags;
+      });
+    } else {
+      setTags({});
+    }
+  }, [aantalKoppelingen]);
+
   const resetForm = () => {
     setName("");
     setBrand("");
@@ -101,17 +126,16 @@ export default function TractorManagement({ navigation }) {
     setPower("");
     setYear("");
     setAantalKoppelingen("");
+    setTags({});
     setCurrentTractor(null);
     setEditMode(false);
   };
 
-  // Open modal for adding new tractor
   const handleAddTractor = () => {
     resetForm();
     setModalVisible(true);
   };
 
-  // Open modal for editing tractor
   const handleEditTractor = (tractor) => {
     setCurrentTractor(tractor);
     setName(tractor.name || "");
@@ -123,11 +147,11 @@ export default function TractorManagement({ navigation }) {
     setAantalKoppelingen(
       tractor.aantalKoppelingen ? tractor.aantalKoppelingen.toString() : ""
     );
+    setTags(tractor.tags || {});
     setEditMode(true);
     setModalVisible(true);
   };
 
-  // Save tractor (add new or update existing)
   const handleSaveTractor = async () => {
     if (!name || !brand || !model) {
       showMessage({
@@ -149,25 +173,20 @@ export default function TractorManagement({ navigation }) {
         aantalKoppelingen: aantalKoppelingen
           ? parseInt(aantalKoppelingen)
           : null,
+        tags,
         updatedAt: new Date(),
       };
 
       if (editMode && currentTractor) {
         const tractorRef = doc(db, COLLECTION_NAME, currentTractor.id);
         await updateDoc(tractorRef, tractorData);
-        showMessage({
-          message: "Tractor bijgewerkt",
-          type: "success",
-        });
+        showMessage({ message: "Tractor bijgewerkt", type: "success" });
       } else {
         tractorData.createdAt = new Date();
         const newTractorId = await generateNextTractorId();
         const tractorRef = doc(db, COLLECTION_NAME, newTractorId);
         await setDoc(tractorRef, tractorData);
-        showMessage({
-          message: "Tractor toegevoegd",
-          type: "success",
-        });
+        showMessage({ message: "Tractor toegevoegd", type: "success" });
       }
 
       setModalVisible(false);
@@ -183,7 +202,6 @@ export default function TractorManagement({ navigation }) {
     }
   };
 
-  // Delete tractor using helper from Firebase.jsx
   const deleteTractor = async (tractorId) => {
     const result = await deleteDocument(COLLECTION_NAME, tractorId);
     if (result.success) {
@@ -198,7 +216,6 @@ export default function TractorManagement({ navigation }) {
     }
   };
 
-  // Render tractor item
   const renderTractorItem = ({ item }) => (
     <View style={styles.tractorItem}>
       <View style={styles.tractorInfo}>
@@ -211,6 +228,12 @@ export default function TractorManagement({ navigation }) {
         {item.aantalKoppelingen && (
           <Text>Aantal koppelingen: {item.aantalKoppelingen}</Text>
         )}
+        {item.tags &&
+          Object.entries(item.tags).map(([key, value]) => (
+            <Text key={key}>
+              Koppeling {key}: {value}
+            </Text>
+          ))}
       </View>
       <View style={styles.tractorActions}>
         <TouchableOpacity
@@ -225,9 +248,87 @@ export default function TractorManagement({ navigation }) {
         >
           <Text style={styles.buttonText}>Verwijderen</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          style={[
+            styles.actionButton,
+            { backgroundColor: "#FFA500", marginTop: 8 },
+          ]}
+          onPress={() => handleOpenScanModal(item)}
+        >
+          <Text style={styles.buttonText}>Scan koppelingen</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
+
+  const handleOpenScanModal = (tractor) => {
+    setScanTargetTractor(tractor);
+    setScannedTags(tractor.tags || {});
+    setScanningIndex(1);
+    setScanModalVisible(true);
+  };
+
+  const handleSaveScannedTags = async () => {
+    if (!scanTargetTractor) return;
+    try {
+      const updatedTractor = {
+        ...scanTargetTractor,
+        tags: scannedTags,
+        updatedAt: new Date(),
+      };
+      const tractorRef = doc(db, COLLECTION_NAME, scanTargetTractor.id);
+      await updateDoc(tractorRef, { tags: scannedTags, updatedAt: new Date() });
+      setTractors((prev) =>
+        prev.map((t) => (t.id === scanTargetTractor.id ? updatedTractor : t))
+      );
+      showMessage({
+        message: "Koppelingen succesvol opgeslagen!",
+        type: "success",
+      });
+      setScanModalVisible(false);
+      setScanTargetTractor(null);
+    } catch (error) {
+      showMessage({
+        message: "Fout bij opslaan van koppelingen",
+        description: error.message,
+        type: "danger",
+      });
+    }
+  };
+
+  // const scanNfcTag = async (koppelingNum) => {
+  //   try {
+  //     await NfcManager.start();
+  //     await NfcManager.requestTechnology(NfcTech.Ndef);
+  //     const tag = await NfcManager.getTag();
+  //     const tagId =
+  //       tag.id ||
+  //       (tag.ndefMessage && tag.ndefMessage[0]?.id) ||
+  //       `NFC_TAG_${Date.now()}`;
+  //     setScannedTags((prev) => ({ ...prev, [koppelingNum]: tagId }));
+  //     showMessage({
+  //       message: `Koppeling ${koppelingNum} gescand!`,
+  //       type: "success",
+  //     });
+  //   } catch (e) {
+  //     showMessage({ message: `Scan geannuleerd of mislukt`, type: "warning" });
+  //   } finally {
+  //     NfcManager.cancelTechnologyRequest();
+  //   }
+  // };
+  const scanNfcTag = async (koppelingNum) => {
+    // MOCK: Simulate a scan with a timeout and fake tag ID
+    setTimeout(() => {
+      setScannedTags((prev) => ({
+        ...prev,
+        [koppelingNum]: `FAKE_TAG_ID_${koppelingNum}_${Date.now()}`,
+      }));
+      showMessage({
+        message: `Koppeling ${koppelingNum} gescand! (gesimuleerd)`,
+        type: "success",
+      });
+    }, 500);
+  };
 
   if (loading && tractors.length === 0) {
     return (
@@ -263,7 +364,6 @@ export default function TractorManagement({ navigation }) {
         />
       )}
 
-      {/* Add/Edit Tractor Modal */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -275,7 +375,6 @@ export default function TractorManagement({ navigation }) {
             <Text style={styles.modalTitle}>
               {editMode ? "Tractor bewerken" : "Nieuwe tractor toevoegen"}
             </Text>
-
             <ScrollView style={styles.formContainer}>
               <Text style={styles.inputLabel}>Naam *</Text>
               <TextInput
@@ -290,7 +389,7 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={brand}
                 onChangeText={setBrand}
-                placeholder="e.g. John Deere, Fendt, New Holland"
+                placeholder="e.g. John Deere, Fendt"
               />
 
               <Text style={styles.inputLabel}>Model *</Text>
@@ -298,7 +397,7 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={model}
                 onChangeText={setModel}
-                placeholder="e.g. 6120R, 724 Vario"
+                placeholder="e.g. 6120R"
               />
 
               <Text style={styles.inputLabel}>Serienummer</Text>
@@ -306,7 +405,7 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={serialNumber}
                 onChangeText={setSerialNumber}
-                placeholder="e.g. xxxx-xxxx-xxxx-xxxx"
+                placeholder="e.g. SN1234"
               />
 
               <Text style={styles.inputLabel}>Vermogen (pk)</Text>
@@ -314,7 +413,6 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={power}
                 onChangeText={setPower}
-                placeholder="e.g. 120"
                 keyboardType="numeric"
               />
 
@@ -323,7 +421,6 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={year}
                 onChangeText={setYear}
-                placeholder="e.g. 2012"
                 keyboardType="numeric"
               />
 
@@ -332,9 +429,10 @@ export default function TractorManagement({ navigation }) {
                 style={styles.input}
                 value={aantalKoppelingen}
                 onChangeText={setAantalKoppelingen}
-                placeholder="e.g. 4"
                 keyboardType="numeric"
               />
+
+              {/* Removed the manual tag input fields from here */}
             </ScrollView>
 
             <View style={styles.modalActions}>
@@ -351,6 +449,113 @@ export default function TractorManagement({ navigation }) {
                 <Text style={styles.buttonText}>Opslaan</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* NFC Scan Modal */}
+      <Modal
+        visible={scanModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setScanModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            {scanTargetTractor &&
+            scanningIndex <= parseInt(scanTargetTractor.aantalKoppelingen) ? (
+              <>
+                <Text
+                  style={styles.modalTitle}
+                >{`Koppeling ${scanningIndex}`}</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.scanTagButton,
+                    scannedTags[scanningIndex]
+                      ? styles.scanTagButtonScanned
+                      : styles.scanTagButtonDefault,
+                  ]}
+                  onPress={async () => await scanNfcTag(scanningIndex)}
+                  disabled={!!scannedTags[scanningIndex]}
+                >
+                  <Text style={styles.scanTagButtonText}>
+                    {scannedTags[scanningIndex] ? "Gescand" : "SCAN TAG"}
+                  </Text>
+                </TouchableOpacity>
+                {scannedTags[scanningIndex] && (
+                  <Text style={{ color: "#4CAF50", marginBottom: 12 }}>
+                    Tag: {scannedTags[scanningIndex]}
+                  </Text>
+                )}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginTop: 24,
+                  }}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.modalButton,
+                      styles.cancelButton,
+                      { flex: 1, marginRight: 8 },
+                    ]}
+                    onPress={() => setScanModalVisible(false)}
+                  >
+                    <Text style={styles.buttonText}>Exit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modalButton,
+                      styles.saveButton,
+                      { flex: 1, marginLeft: 8 },
+                    ]}
+                    onPress={() => setScanningIndex((prev) => prev + 1)}
+                    disabled={!scannedTags[scanningIndex]}
+                  >
+                    <Text style={styles.buttonText}>
+                      {scanningIndex ===
+                      parseInt(scanTargetTractor.aantalKoppelingen)
+                        ? "Overzicht"
+                        : "Next"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : scanTargetTractor ? (
+              <>
+                <Text style={styles.modalTitle}>Overzicht</Text>
+                <ScrollView style={{ maxHeight: 200 }}>
+                  {Object.keys(scannedTags)
+                    .sort((a, b) => parseInt(a) - parseInt(b))
+                    .map((key) => (
+                      <Text key={key}>
+                        Koppeling {key}: {scannedTags[key]}
+                      </Text>
+                    ))}
+                </ScrollView>
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.saveButton,
+                    { marginTop: 16 },
+                  ]}
+                  onPress={handleSaveScannedTags}
+                >
+                  <Text style={styles.buttonText}>Opslaan</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.cancelButton,
+                    { marginTop: 8 },
+                  ]}
+                  onPress={() => setScanModalVisible(false)}
+                >
+                  <Text style={styles.buttonText}>Annuleren</Text>
+                </TouchableOpacity>
+              </>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -497,9 +702,32 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   cancelButton: {
-    backgroundColor: "#9E9E9E",
+    backgroundColor: "#FF0000",
   },
   saveButton: {
     backgroundColor: "#4CAF50",
+  },
+  scanTagButton: {
+    width: "100%",
+    minHeight: 64,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginVertical: 16,
+    borderWidth: 2,
+    borderColor: "#bdbdbd",
+  },
+  scanTagButtonDefault: {
+    backgroundColor: "#00bee1",
+  },
+  scanTagButtonScanned: {
+    backgroundColor: "#4CAF50", // green
+    borderColor: "#388E3C",
+  },
+  scanTagButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 22,
+    letterSpacing: 1,
   },
 });
