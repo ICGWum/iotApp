@@ -1,8 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { View, Button, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
-import { db } from "./Firebase";
-import firestore from "@react-native-firebase/firestore";
-import { collection, getDocs, limit, query } from "firebase/firestore";
+import { db } from "./Firebase"; // Import your Firebase configuration
+import { collection, getDocs, limit, query, doc, getDoc } from "firebase/firestore";
 
 const tractorImg = { uri: "https://img.icons8.com/ios-filled/100/tractor.png" };
 const equipmentImg = { uri: "https://img.icons8.com/ios-filled/100/plough.png" };
@@ -17,6 +16,18 @@ export default function MedewerkerScreen({ navigation }) {
   const separatorTop = Math.min(tractorConnectors, equipmentConnectors) * 44;
   const [instructionsVisible, setInstructionsVisible] = useState(false);
 
+  const [tractorTags, setTractorTags] = useState([]);
+  const [equipmentTags, setEquipmentTags] = useState([]);
+  const [connectorMapping, setConnectorMapping] = useState([]); // Array of {tractor, werktuig}
+  const [instructions, setInstructions] = useState({}); // { 'instructie-1': { img, text }, ... }
+  const [selectedInstruction, setSelectedInstruction] = useState(null); // For modal per row
+
+  const [userConnections, setUserConnections] = useState([]); // [{tractor: '1', equipment: '1'}, ...]
+  const [currentConnectionIndex, setCurrentConnectionIndex] = useState(0);
+  const [showNextPage, setShowNextPage] = useState(false);
+  const [debiet, setDebiet] = useState(null);
+  const [druk, setDruk] = useState(null);
+
   // Fetch first tractor from Firestore and set koppelingen
   const handleTractorPress = async () => {
   setLoadingTractor(true);
@@ -27,7 +38,8 @@ export default function MedewerkerScreen({ navigation }) {
       const doc = snapshot.docs[0];
       const koppelingen = doc.get("aantalKoppelingen") || 0;
       setTractorConnectors(koppelingen);
-      setSelectedTractorName(doc.get("name") || "Onbekend");
+      setSelectedTractorName(doc.id); // Use doc.id for name (e.g., 'tractor-1')
+      setTractorTags(doc.get("tags") || []);
     }
   } catch (error) {
     console.error("Error fetching tractor:", error);
@@ -42,13 +54,43 @@ const handleEquipmentPress = async () => {
     if (!snapshot.empty) {
       const doc = snapshot.docs[0];
       const koppelingen = doc.get("aantalKoppelingen") || 0;
-      setSelectedEquipmentName(doc.get("name") || "Onbekend");
+      setSelectedEquipmentName(doc.id); // Use doc.id for name (e.g., 'werktuig-1')
       setEquipmentConnectors(koppelingen);
+      setEquipmentTags(doc.get("tags") || []);
     }
   } catch (error) {
     console.error("Error fetching equipment:", error);
   }
 };
+
+useEffect(() => {
+  const fetchCombination = async () => {
+    if (selectedTractorName && selectedEquipmentName) {
+      try {
+        const docRef = doc(db, "combinations", selectedTractorName);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          // Get mapping array for this equipment
+          const mapping = docSnap.get(selectedEquipmentName) || [];
+          setConnectorMapping(mapping);
+
+          // Get instructions for this equipment
+          const instructionsField = docSnap.get(selectedEquipmentName + "i") || {};
+          setInstructions(instructionsField);
+        }
+      } catch (error) {
+        console.error("Error fetching combination/instructions:", error);
+      }
+    } else {
+      setConnectorMapping([]);
+      setInstructions({});
+    }
+  };
+  fetchCombination();
+}, [selectedTractorName, selectedEquipmentName]);
+
+console.log("connectorMapping", connectorMapping);
+console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equipmentConnectors);
 
   return (
     <View style={styles.container}>
@@ -68,11 +110,56 @@ const handleEquipmentPress = async () => {
       >
         <View style={styles.overlayBackground}>
           <View style={styles.overlayContainer}>
-            <ScrollView
-              contentContainerStyle={{ flexGrow: 1, alignItems: "center", justifyContent: "flex-start" }}
-              showsVerticalScrollIndicator={false}
-              style={{ width: "100%" }}
-            >
+            {showNextPage ? (
+              <>
+                <View style={{ flex: 1, alignItems: "center", justifyContent: "center", width: "100%" }}>
+                  <Text style={{ fontSize: 22, fontWeight: "bold", marginBottom: 24 }}>Resultaten</Text>
+                  <Text style={{ fontSize: 18, marginBottom: 12 }}>Debiet: {debiet ?? "Laden..."}</Text>
+                  <Text style={{ fontSize: 18, marginBottom: 32 }}>Druk: {druk ?? "Laden..."}</Text>
+                </View>
+                <View style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                  position: "absolute",
+                  left: 24,
+                  right: 24,
+                  bottom: 24,
+                }}>
+                  <Button
+                    title="Sluiten"
+                    onPress={() => {
+                      setModalVisible(false);
+                      setTimeout(() => {
+                        setTractorConnectors(0);
+                        setEquipmentConnectors(0);
+                        setSelectedTractorName("");
+                        setSelectedEquipmentName("");
+                        setUserConnections([]);
+                        setCurrentConnectionIndex(0);
+                        setShowNextPage(false);
+                        setDebiet(null);
+                        setDruk(null);
+                      }, 300);
+                    }}
+                  />
+                  <Button
+                    title="Terug"
+                    onPress={() => setShowNextPage(false)}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                <ScrollView
+                  contentContainerStyle={{
+                    flexGrow: 1,
+                    alignItems: "center",
+                    justifyContent: "flex-start",
+                    paddingBottom: 120,
+                  }}
+                  showsVerticalScrollIndicator={false}
+                  style={{ flex: 1, width: "100%" }}
+                >
               {/* Top row: Tractor and Equipment buttons */}
               <View style={[styles.topRow, { flexWrap: "wrap" }]}>
                 <TouchableOpacity style={styles.squareButton} onPress={handleTractorPress}>
@@ -100,27 +187,44 @@ const handleEquipmentPress = async () => {
               <View style={styles.connectorsRow}>
                 <View style={{ flex: 1 }}>
                   {/* Connected (blue) rows with ? button */}
-                  {[...Array(Math.min(tractorConnectors, equipmentConnectors))].map((_, i) => (
-                    <View key={i} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                      {/* Tractor ball */}
-                      <View style={styles.connectorBallWithNumber}>
-                        <Text style={styles.connectorBallNumber}>{i + 1}</Text>
+                  {Object.entries(connectorMapping).map(([tractor, equipment], i) => {
+                    const isConnected = userConnections.some(
+                      (conn) => conn.tractor === tractor && conn.equipment === equipment
+                    );
+                    return (
+                      <View key={i} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+                        {/* Tractor ball */}
+                        <View style={[
+                          styles.connectorBallWithNumber,
+                          isConnected && { backgroundColor: "green" }
+                        ]}>
+                          <Text style={styles.connectorBallNumber}>{tractor}</Text>
+                        </View>
+                        {/* Line */}
+                        <View style={{
+                          width: 60,
+                          height: 4,
+                          backgroundColor: isConnected ? "green" : "#149cfb",
+                          borderRadius: 2,
+                          marginHorizontal: 8
+                        }} />
+                        {/* Equipment ball */}
+                        <View style={[
+                          styles.connectorBallWithNumber,
+                          isConnected && { backgroundColor: "green" }
+                        ]}>
+                          <Text style={styles.connectorBallNumber}>{equipment}</Text>
+                        </View>
+                        {/* Instructions button at the end of the row */}
+                        <TouchableOpacity
+                          style={[styles.instructionsButton, { marginLeft: 12 }]}
+                          onPress={() => setSelectedInstruction(i + 1)}
+                        >
+                          <Text style={styles.instructionsButtonText}>?</Text>
+                        </TouchableOpacity>
                       </View>
-                      {/* Line */}
-                      <View style={{ width: 60, height: 4, backgroundColor: "#149cfb", borderRadius: 2, marginHorizontal: 8 }} />
-                      {/* Equipment ball */}
-                      <View style={styles.connectorBallWithNumber}>
-                        <Text style={styles.connectorBallNumber}>{i + 1}</Text>
-                      </View>
-                      {/* Instructions button at the end of the row */}
-                      <TouchableOpacity
-                        style={[styles.instructionsButton, { marginLeft: 12 }]}
-                        onPress={() => setInstructionsVisible(true)}
-                      >
-                        <Text style={styles.instructionsButtonText}>?</Text>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
+                    );
+                  })}
 
                   {/* Separator line after last blue row, but only if there are grey balls */}
                   {(tractorConnectors !== equipmentConnectors && Math.min(tractorConnectors, equipmentConnectors) > 0) && (
@@ -130,7 +234,6 @@ const handleEquipmentPress = async () => {
                       {/* Long dashed separator */}
                       <View
                         style={{
-                          flex: 1,
                           height: 2,
                           borderBottomWidth: 2,
                           borderColor: "#bdbdbd",
@@ -156,8 +259,7 @@ const handleEquipmentPress = async () => {
                   {equipmentConnectors > tractorConnectors &&
                     [...Array(equipmentConnectors - tractorConnectors)].map((_, i) => (
                       <View key={`equipment-grey-${i}`} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                        <View style={{ width: 28 }} /> {/* Empty space for alignment */}
-                        <View style={{ width: 60 }} />
+                        <View style={{ width: 28 }}></View><View style={{ width: 60 }}></View>
                         <View style={[styles.connectorBallWithNumber, styles.connectorBallGrey]}>
                           <Text style={styles.connectorBallNumber}>{tractorConnectors + i + 1}</Text>
                         </View>
@@ -166,8 +268,33 @@ const handleEquipmentPress = async () => {
                 </View>
               </View>
               {/* Add more modal content here if needed */}
+              <Button
+                title="verbinding"
+                onPress={() => {
+                  const pairs = Object.entries(connectorMapping);
+                  console.log("Pressed verbinding", { currentConnectionIndex, pairs });
+                  if (currentConnectionIndex < pairs.length) {
+                    setUserConnections([
+                      ...userConnections,
+                      { tractor: pairs[currentConnectionIndex][0], equipment: pairs[currentConnectionIndex][1] }
+                    ]);
+                    setCurrentConnectionIndex(currentConnectionIndex + 1);
+                  }
+                }}
+                // disabled={
+                //   currentConnectionIndex >= Object.entries(connectorMapping).length ||
+                //   Object.entries(connectorMapping).length === 0
+                // }
+              />
             </ScrollView>
-            <View style={styles.closeButtonContainer}>
+            <View style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              position: "absolute",
+              left: 24,
+              right: 24,
+              bottom: 24,
+            }}>
               <Button
                 title="Sluiten"
                 onPress={() => {
@@ -177,30 +304,67 @@ const handleEquipmentPress = async () => {
                     setEquipmentConnectors(0);
                     setSelectedTractorName("");
                     setSelectedEquipmentName("");
-                  }, 300); // Wait for modal close animation
+                    setUserConnections([]);
+                    setCurrentConnectionIndex(0);
+                    setShowNextPage(false);
+                  }, 300);
                 }}
               />
+              <Button
+                title="Volgende"
+                onPress={async () => {
+                  if (selectedEquipmentName) {
+                    const docRef = doc(db, "equipment", selectedEquipmentName);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                      setDebiet(docSnap.get("debiet"));
+                      setDruk(docSnap.get("druk"));
+                    } else {
+                      setDebiet("Onbekend");
+                      setDruk("Onbekend");
+                    }
+                  }
+                  setShowNextPage(true);
+                }}
+                disabled={
+                  userConnections.length !== Object.entries(connectorMapping).length ||
+                  !selectedTractorName ||
+                  !selectedEquipmentName
+                }
+              />
             </View>
-          </View>
-        </View>
-      </Modal>
+          </>
+        )}
+      </View>
+    </View>
+  </Modal>
 
       {/* Instructions Modal */}
       <Modal
-        visible={instructionsVisible}
+        visible={selectedInstruction !== null}
         animationType="fade"
         transparent
-        onRequestClose={() => setInstructionsVisible(false)}
+        onRequestClose={() => setSelectedInstruction(null)}
       >
         <View style={styles.overlayBackground}>
           <View style={styles.instructionsContainer}>
             <Text style={styles.instructionsTitle}>Instructies</Text>
             <Text style={styles.instructionsText}>
-              Verbind de blauwe punten met elkaar. Zorg dat het aantal aansluitingen overeenkomt aan beide kanten. Grijze punten worden niet gebruikt.
+              {instructions[`instructie-${selectedInstruction}`]?.[1] || "Geen instructie gevonden."}
             </Text>
-            <View style={styles.instructionsImagePlaceholder} />
+            {instructions[`instructie-${selectedInstruction}`]?.[0] &&
+              instructions[`instructie-${selectedInstruction}`][0].startsWith("http") ? (
+                <Image
+                  source={{ uri: instructions[`instructie-${selectedInstruction}`][0] }}
+                  style={styles.instructionsImagePlaceholder}
+                  resizeMode="contain"
+                />
+              ) : (
+                <View style={styles.instructionsImagePlaceholder} />
+              )
+            }
             <View style={{ marginTop: 24 }}>
-              <Button title="Sluiten" onPress={() => setInstructionsVisible(false)} />
+              <Button title="Sluiten" onPress={() => setSelectedInstruction(null)} />
             </View>
           </View>
         </View>
@@ -250,6 +414,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   overlayContainer: {
+    flex: 1,
     backgroundColor: "#fff",
     borderRadius: 16,
     padding: 24,
