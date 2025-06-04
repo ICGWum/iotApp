@@ -32,6 +32,11 @@ export default function EquipmentManagement({ navigation }) {
   const [editMode, setEditMode] = useState(false);
   const [currentEquipment, setCurrentEquipment] = useState(null);
 
+  const [tags, setTags] = useState({});
+  const [scanModalVisible, setScanModalVisible] = useState(false);
+  const [scanningIndex, setScanningIndex] = useState(1);
+  const [scannedTags, setScannedTags] = useState({});
+
   // Form fields
   const [name, setName] = useState("");
   const [type, setType] = useState("");
@@ -93,6 +98,28 @@ export default function EquipmentManagement({ navigation }) {
     fetchEquipment();
   }, []);
 
+  // Add this effect to keep tags in sync with aantalKoppelingen
+  useEffect(() => {
+    const koppelingen = parseInt(aantalKoppelingen);
+    if (!isNaN(koppelingen) && koppelingen > 0) {
+      setTags((prevTags) => {
+        const updatedTags = { ...prevTags };
+        for (let i = 1; i <= koppelingen; i++) {
+          if (!(i in updatedTags)) {
+            updatedTags[i] = "";
+          }
+        }
+        // Remove tags above the current count
+        Object.keys(updatedTags).forEach((key) => {
+          if (parseInt(key) > koppelingen) delete updatedTags[key];
+        });
+        return updatedTags;
+      });
+    } else {
+      setTags({});
+    }
+  }, [aantalKoppelingen]);
+
   // Reset form fields
   const resetForm = () => {
     setName("");
@@ -109,6 +136,8 @@ export default function EquipmentManagement({ navigation }) {
   // Open modal for adding new equipment
   const handleAddEquipment = () => {
     resetForm();
+    setTags({}); // ensure tags are empty for new equipment
+    setScannedTags({}); // ensure scannedTags are empty for new equipment
     setModalVisible(true);
   };
 
@@ -124,6 +153,7 @@ export default function EquipmentManagement({ navigation }) {
     setAantalKoppelingen(
       equipment.aantalKoppelingen ? equipment.aantalKoppelingen.toString() : ""
     );
+    setTags(equipment.tags || {}); // <-- load tags when editing
     setEditMode(true);
     setModalVisible(true);
   };
@@ -139,6 +169,9 @@ export default function EquipmentManagement({ navigation }) {
       return;
     }
 
+    // Always use the latest scannedTags if available
+    const tagsToSave = Object.keys(scannedTags).length > 0 ? scannedTags : tags;
+
     try {
       const equipmentData = {
         name,
@@ -147,9 +180,8 @@ export default function EquipmentManagement({ navigation }) {
         serialNumber,
         debiet: debiet ? parseFloat(debiet) : null,
         druk: druk ? parseFloat(druk) : null,
-        aantalKoppelingen: aantalKoppelingen
-          ? parseInt(aantalKoppelingen)
-          : null,
+        aantalKoppelingen: aantalKoppelingen ? aantalKoppelingen : "",
+        tags: { ...tagsToSave }, // ensure tags mapping is saved
         updatedAt: new Date(),
       };
 
@@ -232,6 +264,38 @@ export default function EquipmentManagement({ navigation }) {
     }
   };
 
+  // Add this function to save scanned tags for equipment, just like TractorManagement
+  const handleSaveScannedTags = async () => {
+    if (!currentEquipment) return;
+    try {
+      const updatedEquipment = {
+        ...currentEquipment,
+        tags: scannedTags,
+        updatedAt: new Date(),
+      };
+      const equipmentRef = doc(db, COLLECTION_NAME, currentEquipment.id);
+      await updateDoc(equipmentRef, {
+        tags: scannedTags,
+        updatedAt: new Date(),
+      });
+      setEquipment((prev) =>
+        prev.map((e) => (e.id === currentEquipment.id ? updatedEquipment : e))
+      );
+      showMessage({
+        message: "Koppelingen succesvol opgeslagen!",
+        type: "success",
+      });
+      setScanModalVisible(false);
+      setCurrentEquipment(null);
+    } catch (error) {
+      showMessage({
+        message: "Fout bij opslaan van koppelingen",
+        description: error.message,
+        type: "danger",
+      });
+    }
+  };
+
   // Render equipment item
   const renderEquipmentItem = ({ item }) => (
     <View style={styles.equipmentItem}>
@@ -244,6 +308,18 @@ export default function EquipmentManagement({ navigation }) {
         {item.druk && <Text>Druk: {item.druk} bar</Text>}
         {item.aantalKoppelingen && (
           <Text>Aantal koppelingen: {item.aantalKoppelingen}</Text>
+        )}
+        {item.tags && Object.keys(item.tags).length > 0 && (
+          <View style={{ marginTop: 6 }}>
+            <Text style={{ fontWeight: "bold" }}>Koppelingen:</Text>
+            {Object.keys(item.tags)
+              .sort((a, b) => parseInt(a) - parseInt(b))
+              .map((key) => (
+                <Text key={key}>
+                  Koppeling {key}: {item.tags[key]}
+                </Text>
+              ))}
+          </View>
         )}
       </View>
       <View style={styles.equipmentActions}>
@@ -258,6 +334,29 @@ export default function EquipmentManagement({ navigation }) {
           onPress={() => handleDeleteEquipment(item)}
         >
           <Text style={styles.buttonText}>Verwijderen</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={{
+            backgroundColor: "#FF9800", // orange for consistency
+            padding: 10,
+            borderRadius: 6,
+            marginTop: 8,
+            alignItems: "center",
+          }}
+          onPress={() => {
+            setCurrentEquipment(item);
+            setTags(item.tags || {});
+            setScannedTags(item.tags || {}); // only prefill with real tags, not fake
+            setAantalKoppelingen(
+              item.aantalKoppelingen ? item.aantalKoppelingen.toString() : ""
+            );
+            setScanningIndex(1);
+            setScanModalVisible(true);
+          }}
+        >
+          <Text style={{ color: "#fff", fontWeight: "bold" }}>
+            Scan koppelingen
+          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -285,20 +384,21 @@ export default function EquipmentManagement({ navigation }) {
           </TouchableOpacity>
         </View>
       </View>
-
-      {equipment.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Text style={styles.emptyText}>Geen werktuigen gevonden</Text>
-          <Text>Voeg je eerste werktuig toe met de knop hierboven</Text>
-        </View>
-      ) : (
-        <FlatList
-          data={equipment}
-          renderItem={renderEquipmentItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.list}
-        />
-      )}
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
+        {equipment.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Text style={styles.emptyText}>Geen werktuigen gevonden</Text>
+            <Text>Voeg je eerste werktuig toe met de knop hierboven</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={equipment}
+            renderItem={renderEquipmentItem}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={styles.list}
+          />
+        )}
+      </ScrollView>
 
       {/* Add/Edit Equipment Modal */}
       <Modal
@@ -372,6 +472,21 @@ export default function EquipmentManagement({ navigation }) {
                 placeholder="Voer aantal koppelingen in"
                 keyboardType="numeric"
               />
+
+              {Object.keys(tags).length > 0 && (
+                <View style={{ marginBottom: 12 }}>
+                  <Text style={{ fontWeight: "bold", marginBottom: 4 }}>
+                    Gescande koppelingen:
+                  </Text>
+                  {Object.keys(tags)
+                    .sort((a, b) => parseInt(a) - parseInt(b))
+                    .map((key) => (
+                      <Text key={key}>
+                        Koppeling {key}: {tags[key]}
+                      </Text>
+                    ))}
+                </View>
+              )}
             </ScrollView>
 
             <View style={styles.modalActions}>
@@ -388,6 +503,123 @@ export default function EquipmentManagement({ navigation }) {
                 <Text style={styles.buttonText}>Opslaan</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Scan Modal */}
+      <Modal
+        visible={scanModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setScanModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            {scanningIndex <= parseInt(aantalKoppelingen || "0") ? (
+              <>
+                <Text
+                  style={styles.modalTitle}
+                >{`Koppeling ${scanningIndex}`}</Text>
+                <TouchableOpacity
+                  style={[
+                    styles.scanTagButton,
+                    scannedTags[scanningIndex]
+                      ? styles.scanTagButtonScanned
+                      : styles.scanTagButtonDefault,
+                  ]}
+                  onPress={async () => {
+                    // MOCK: Simulate NFC scan (replace with real NFC code)
+                    setTimeout(() => {
+                      setScannedTags((prev) => ({
+                        ...prev,
+                        [scanningIndex]: `FAKE_TAG_ID_${scanningIndex}_${Date.now()}`,
+                      }));
+                      showMessage({
+                        message: `Koppeling ${scanningIndex} gescand! (gesimuleerd)`,
+                        type: "success",
+                      });
+                    }, 500);
+                  }}
+                  disabled={!!scannedTags[scanningIndex]}
+                >
+                  <Text style={styles.scanTagButtonText}>
+                    {scannedTags[scanningIndex] ? "Gescand" : "SCAN TAG"}
+                  </Text>
+                </TouchableOpacity>
+                {scannedTags[scanningIndex] && (
+                  <Text style={{ color: "#4CAF50", marginBottom: 12 }}>
+                    Tag: {scannedTags[scanningIndex]}
+                  </Text>
+                )}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    marginTop: 24,
+                  }}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.modalButton,
+                      styles.cancelButton,
+                      { flex: 1, marginRight: 8 },
+                    ]}
+                    onPress={() => setScanModalVisible(false)}
+                  >
+                    <Text style={styles.buttonText}>Exit</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.modalButton,
+                      styles.saveButton,
+                      { flex: 1, marginLeft: 8 },
+                    ]}
+                    onPress={() => setScanningIndex((prev) => prev + 1)}
+                    disabled={!scannedTags[scanningIndex]}
+                  >
+                    <Text style={styles.buttonText}>
+                      {scanningIndex === parseInt(aantalKoppelingen)
+                        ? "Overzicht"
+                        : "Next"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>Overzicht</Text>
+                <ScrollView style={{ maxHeight: 200 }}>
+                  {Object.keys(scannedTags)
+                    .sort((a, b) => parseInt(a) - parseInt(b))
+                    .map((key) => (
+                      <Text key={key}>
+                        Koppeling {key}: {scannedTags[key]}
+                      </Text>
+                    ))}
+                </ScrollView>
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.saveButton,
+                    { marginTop: 16 },
+                  ]}
+                  onPress={handleSaveScannedTags}
+                >
+                  <Text style={styles.buttonText}>Opslaan</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modalButton,
+                    styles.cancelButton,
+                    { marginTop: 8 },
+                  ]}
+                  onPress={() => setScanModalVisible(false)}
+                >
+                  <Text style={styles.buttonText}>Annuleren</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
       </Modal>
@@ -534,9 +766,27 @@ const styles = StyleSheet.create({
     marginHorizontal: 8,
   },
   cancelButton: {
-    backgroundColor: "#9E9E9E",
+    backgroundColor: "#FF0000",
   },
   saveButton: {
     backgroundColor: "#4CAF50",
+  },
+  scanTagButton: {
+    backgroundColor: "#007bff",
+    paddingVertical: 12,
+    borderRadius: 4,
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  scanTagButtonDefault: {
+    backgroundColor: "#00bee1",
+  },
+  scanTagButtonScanned: {
+    backgroundColor: "#4CAF50",
+  },
+  scanTagButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });
