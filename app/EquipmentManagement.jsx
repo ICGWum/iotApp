@@ -51,7 +51,7 @@ export default function EquipmentManagement({ navigation }) {
   const [serialNumber, setSerialNumber] = useState("");
   const [debiet, setDebiet] = useState("");
   const [druk, setDruk] = useState("");
-  const [aantalKoppelingen, setAantalKoppelingen] = useState("");
+  const [aantalKoppelingen, setAantalKoppelingen] = useState(0); // number type
   const [imageUri, setImageUri] = useState("");
 
   // Fetch all equipment from Firestore
@@ -86,7 +86,7 @@ export default function EquipmentManagement({ navigation }) {
 
   // Add this effect to keep tags in sync with aantalKoppelingen
   useEffect(() => {
-    const koppelingen = parseInt(aantalKoppelingen);
+    const koppelingen = aantalKoppelingen;
     if (!isNaN(koppelingen) && koppelingen > 0) {
       setTags((prevTags) => {
         const updatedTags = { ...prevTags };
@@ -114,7 +114,7 @@ export default function EquipmentManagement({ navigation }) {
     setSerialNumber("");
     setDebiet("");
     setDruk("");
-    setAantalKoppelingen("");
+    setAantalKoppelingen(0); // number type
     setCurrentEquipment(null);
     setEditMode(false);
   };
@@ -138,7 +138,11 @@ export default function EquipmentManagement({ navigation }) {
     setDebiet(equipment.debiet ? equipment.debiet.toString() : "");
     setDruk(equipment.druk ? equipment.druk.toString() : "");
     setAantalKoppelingen(
-      equipment.aantalKoppelingen ? equipment.aantalKoppelingen.toString() : ""
+      typeof equipment.aantalKoppelingen === "number"
+        ? equipment.aantalKoppelingen
+        : equipment.aantalKoppelingen
+        ? parseInt(equipment.aantalKoppelingen)
+        : 0
     );
     setTags(equipment.tags || {}); // <-- load tags when editing
     setImageUri(equipment.imageUri || ""); // load image
@@ -195,7 +199,7 @@ export default function EquipmentManagement({ navigation }) {
         serialNumber,
         debiet: debiet ? parseFloat(debiet) : null,
         druk: druk ? parseFloat(druk) : null,
-        aantalKoppelingen: aantalKoppelingen ? aantalKoppelingen : "",
+        aantalKoppelingen: aantalKoppelingen, // number type
         tags: { ...tagsToSave },
         imageUri,
         updatedAt: new Date(),
@@ -512,8 +516,13 @@ export default function EquipmentManagement({ navigation }) {
               <Text style={styles.inputLabel}>Aantal koppelingen</Text>
               <TextInput
                 style={styles.input}
-                value={aantalKoppelingen}
-                onChangeText={setAantalKoppelingen}
+                value={
+                  aantalKoppelingen === 0 ? "" : aantalKoppelingen.toString()
+                }
+                onChangeText={(text) => {
+                  const num = parseInt(text);
+                  setAantalKoppelingen(isNaN(num) ? 0 : num);
+                }}
                 placeholder="Voer aantal koppelingen in"
                 keyboardType="numeric"
               />
@@ -590,7 +599,7 @@ export default function EquipmentManagement({ navigation }) {
       >
         <View style={styles.modalContainer}>
           <View style={styles.modalContent}>
-            {scanningIndex <= parseInt(aantalKoppelingen || "0") ? (
+            {scanningIndex <= aantalKoppelingen ? (
               <>
                 <Text
                   style={styles.modalTitle}
@@ -653,7 +662,7 @@ export default function EquipmentManagement({ navigation }) {
                     disabled={!scannedTags[scanningIndex]}
                   >
                     <Text style={styles.buttonText}>
-                      {scanningIndex === parseInt(aantalKoppelingen)
+                      {scanningIndex === aantalKoppelingen
                         ? "Overzicht"
                         : "Next"}
                     </Text>
@@ -726,7 +735,7 @@ export default function EquipmentManagement({ navigation }) {
                 {infoEquipment.druk && (
                   <Text>Druk: {infoEquipment.druk} bar</Text>
                 )}
-                {infoEquipment.aantalKoppelingen && (
+                {infoEquipment.aantalKoppelingen !== undefined && (
                   <Text>
                     Aantal koppelingen: {infoEquipment.aantalKoppelingen}
                   </Text>
@@ -806,9 +815,9 @@ export default function EquipmentManagement({ navigation }) {
                     infoEquipment.druk ? infoEquipment.druk.toString() : ""
                   );
                   setAantalKoppelingen(
-                    infoEquipment.aantalKoppelingen
-                      ? infoEquipment.aantalKoppelingen.toString()
-                      : ""
+                    infoEquipment.aantalKoppelingen !== undefined
+                      ? infoEquipment.aantalKoppelingen
+                      : 0
                   );
                   setTags(infoEquipment.tags || {});
                   setImageUri(infoEquipment.imageUri || "");
@@ -905,9 +914,9 @@ export default function EquipmentManagement({ navigation }) {
                   setTags(infoEquipment.tags || {});
                   setScannedTags(infoEquipment.tags || {});
                   setAantalKoppelingen(
-                    infoEquipment.aantalKoppelingen
-                      ? infoEquipment.aantalKoppelingen.toString()
-                      : ""
+                    infoEquipment.aantalKoppelingen !== undefined
+                      ? infoEquipment.aantalKoppelingen
+                      : 0
                   );
                   setScanningIndex(1);
                   setScanModalVisible(true);
