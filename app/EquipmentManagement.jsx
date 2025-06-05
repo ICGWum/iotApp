@@ -27,6 +27,7 @@ import {
 import { showMessage } from "react-native-flash-message";
 import * as ImagePicker from "expo-image-picker";
 import { Ionicons } from "@expo/vector-icons";
+import NfcManager, { NfcTech } from "react-native-nfc-manager";
 
 const COLLECTION_NAME = "equipment";
 
@@ -251,37 +252,6 @@ export default function EquipmentManagement({ navigation }) {
     }
   };
 
-  // Delete equipment using helper from Firebase.jsx
-  // const handleDeleteEquipment = (equipment) => {
-  //   Alert.alert(
-  //     "Werktuig verwijderen",
-  //     `Weet je zeker dat je ${equipment.name} wilt verwijderen?`,
-  //     [
-  //       { text: "Annuleren", style: "cancel" },
-  //       {
-  //         text: "Verwijderen",
-  //         style: "destructive",
-  //         onPress: async () => {
-  //           const result = await deleteDocument(COLLECTION_NAME, equipment.id);
-  //           if (result.success) {
-  //             setEquipment((prev) => prev.filter((e) => e.id !== equipment.id));
-  //             showMessage({
-  //               message: "Werktuig verwijderd",
-  //               type: "success",
-  //             });
-  //           } else {
-  //             showMessage({
-  //               message: "Fout bij verwijderen",
-  //               description: result.error.message,
-  //               type: "danger",
-  //             });
-  //           }
-  //         },
-  //       },
-  //     ]
-  //   );
-  // };
-
   const handleDeleteEquipment = async (equipment) => {
     const result = await deleteDocument(COLLECTION_NAME, equipment.id);
     if (result.success) {
@@ -394,6 +364,45 @@ export default function EquipmentManagement({ navigation }) {
   // Delete confirmation state for info modal
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [deleteAnim] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    // Initialize NFC on mount
+    NfcManager.start();
+  }, []);
+
+  // NFC scan handler for koppeling
+  const handleNfcScan = async () => {
+    try {
+      await NfcManager.requestTechnology(NfcTech.Ndef);
+      const tag = await NfcManager.getTag();
+      if (tag && tag.id) {
+        setScannedTags((prev) => ({
+          ...prev,
+          [scanningIndex]: tag.id,
+        }));
+        showMessage({
+          message: `Koppeling ${scanningIndex} gescand!`,
+          description: `Tag ID: ${tag.id}`,
+          type: "success",
+        });
+      } else {
+        showMessage({
+          message: "Geen tag gevonden",
+          type: "warning",
+        });
+      }
+    } catch (ex) {
+      if (ex.message !== "cancelled") {
+        showMessage({
+          message: "Fout bij NFC scan",
+          description: ex.message,
+          type: "danger",
+        });
+      }
+    } finally {
+      NfcManager.cancelTechnologyRequest();
+    }
+  };
 
   if (loading && equipment.length === 0) {
     return (
@@ -611,19 +620,7 @@ export default function EquipmentManagement({ navigation }) {
                       ? styles.scanTagButtonScanned
                       : styles.scanTagButtonDefault,
                   ]}
-                  onPress={async () => {
-                    // MOCK: Simulate NFC scan (replace with real NFC code)
-                    setTimeout(() => {
-                      setScannedTags((prev) => ({
-                        ...prev,
-                        [scanningIndex]: `FAKE_TAG_ID_${scanningIndex}_${Date.now()}`,
-                      }));
-                      showMessage({
-                        message: `Koppeling ${scanningIndex} gescand! (gesimuleerd)`,
-                        type: "success",
-                      });
-                    }, 500);
-                  }}
+                  onPress={handleNfcScan}
                   disabled={!!scannedTags[scanningIndex]}
                 >
                   <Text style={styles.scanTagButtonText}>
