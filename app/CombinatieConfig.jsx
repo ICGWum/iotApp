@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Platform } from "react-native";
 import styles from "./styles/combinatie";
 import {
   View,
@@ -84,17 +85,18 @@ export default function CombinatieConfig() {
   // New state for koppeling mapping error
   const [koppelingMappingError, setKoppelingMappingError] = useState("");
 
-  // --- NFC State for koppeling mapping ---
-  const [nfcScanning, setNfcScanning] = useState(false);
-  const [nfcError, setNfcError] = useState("");
-  const [nfcTagId, setNfcTagId] = useState(null);
+  // --- NFC SCAN STATE ---
+  const [nfcScanStep, setNfcScanStep] = useState(null); // null | { tractor: null|string, werktuig: null|string }
+  const [nfcScanError, setNfcScanError] = useState("");
+  const [highlightedTractorKoppeling, setHighlightedTractorKoppeling] =
+    useState(null);
+  const [highlightedWerktuigKoppeling, setHighlightedWerktuigKoppeling] =
+    useState(null);
 
-  // --- NFC initialization ---
   useEffect(() => {
-    NfcManager.start().catch(() => {});
-    return () => {
-      NfcManager.cancelTechnologyRequest().catch(() => {});
-    };
+    if (Platform.OS !== "web") {
+      NfcManager.start();
+    }
   }, []);
 
   // Fetch all combinations
@@ -785,7 +787,7 @@ export default function CombinatieConfig() {
                 textAlign: "center",
               }}
             >
-              Koppelingen scannen (NFC)
+              Koppelingen scannen (Testscan demo)
             </Text>
             <Text
               style={{
@@ -970,27 +972,18 @@ export default function CombinatieConfig() {
             </View>
             {/* Vertically stacked buttons */}
             <View style={{ width: "100%", marginTop: 18 }}>
-              {/* NFC scan button */}
               <TouchableOpacity
                 style={{
-                  backgroundColor:
-                    nfcScanning ||
-                    remainingWerktuigKoppelingen.length === 0 ||
-                    remainingTractorKoppelingen.length === 0
-                      ? "#bbb"
-                      : "#4caf50",
+                  backgroundColor: "#4caf50",
                   borderRadius: 8,
                   paddingVertical: 14,
                   marginBottom: 10,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
-                onPress={handleNfcScan}
-                disabled={
-                  nfcScanning ||
-                  remainingWerktuigKoppelingen.length === 0 ||
-                  remainingTractorKoppelingen.length === 0
-                }
+                onPress={() => {
+                  /* No functionality yet */
+                }}
               >
                 <Text
                   style={{
@@ -1000,41 +993,18 @@ export default function CombinatieConfig() {
                     textAlign: "center",
                   }}
                 >
-                  {nfcScanning ? "Scannen..." : "Scan koppeling"}
+                  Scan Koppeling
                 </Text>
               </TouchableOpacity>
-              {nfcError ? (
-                <Text
-                  style={{
-                    color: "#e53935",
-                    marginBottom: 8,
-                    textAlign: "center",
-                  }}
-                >
-                  {nfcError}
-                </Text>
-              ) : null}
-              {nfcTagId ? (
-                <Text
-                  style={{
-                    color: "#4caf50",
-                    marginBottom: 8,
-                    textAlign: "center",
-                  }}
-                >
-                  Tag gescand: {nfcTagId}
-                </Text>
-              ) : null}
               <View
                 style={{
                   flexDirection: "row",
                   justifyContent: "space-between",
-                  width: "100%",
                 }}
               >
                 <TouchableOpacity
                   style={{
-                    backgroundColor: "#e53935",
+                    backgroundColor: "#e53935", // red
                     borderRadius: 8,
                     paddingVertical: 12,
                     paddingHorizontal: 24,
@@ -1042,7 +1012,6 @@ export default function CombinatieConfig() {
                     justifyContent: "center",
                   }}
                   onPress={() => setKoppelingMappingModalVisible(false)}
-                  disabled={nfcScanning}
                 >
                   <Text
                     style={{
@@ -1057,38 +1026,31 @@ export default function CombinatieConfig() {
                 <TouchableOpacity
                   style={{
                     backgroundColor:
-                      remainingWerktuigKoppelingen.length === 0 &&
-                      remainingTractorKoppelingen.length === 0 &&
-                      !nfcScanning
-                        ? "#b7e1c6"
-                        : "#bbb",
+                      remainingWerktuigKoppelingen.length === 0
+                        ? "#4caf50"
+                        : "#b7e1c6",
                     borderRadius: 8,
                     paddingVertical: 12,
                     paddingHorizontal: 24,
                     alignItems: "center",
                     justifyContent: "center",
                   }}
-                  disabled={
-                    remainingWerktuigKoppelingen.length !== 0 ||
-                    remainingTractorKoppelingen.length !== 0 ||
-                    nfcScanning ||
-                    savingMapping
-                  }
                   onPress={handleSaveKoppelingMapping}
+                  disabled={
+                    remainingWerktuigKoppelingen.length !== 0 || savingMapping
+                  }
                 >
                   <Text
                     style={{
                       color:
-                        remainingWerktuigKoppelingen.length === 0 &&
-                        remainingTractorKoppelingen.length === 0 &&
-                        !nfcScanning
-                          ? "#666"
-                          : "#fff",
+                        remainingWerktuigKoppelingen.length === 0
+                          ? "#fff"
+                          : "#666",
                       fontWeight: "bold",
                       textAlign: "center",
                     }}
                   >
-                    {savingMapping ? "Opslaan..." : "Opslaan"}
+                    Opslaan
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1565,46 +1527,151 @@ export default function CombinatieConfig() {
     }
   };
 
-  // --- NFC SCAN LOGIC FOR KOPPELING MAPPING MODAL ---
-  // Real NFC Scan Handler
-  const handleNfcScan = async () => {
-    setNfcError("");
-    setNfcTagId(null);
-    setNfcScanning(true);
-    try {
-      await NfcManager.requestTechnology(NfcTech.Ndef, {
-        alertMessage: "Scan een NFC tag voor deze koppeling",
-      });
-      const tag = await NfcManager.getTag();
-      if (tag && tag.id) {
-        setNfcTagId(tag.id);
-        // Map the next available werktuig and tractor koppeling
-        if (
-          remainingWerktuigKoppelingen.length > 0 &&
-          remainingTractorKoppelingen.length > 0
-        ) {
-          const werktuigKoppeling = remainingWerktuigKoppelingen[0];
-          const tractorKoppeling = remainingTractorKoppelingen[0];
-          setMappingPairs((prev) => [
-            ...prev,
-            {
-              tractor: tractorKoppeling,
-              werktuig: werktuigKoppeling,
-              nfcTagId: tag.id,
-            },
-          ]);
-          setRemainingWerktuigKoppelingen((prev) => prev.slice(1));
-          setRemainingTractorKoppelingen((prev) => prev.slice(1));
-        }
-      } else {
-        setNfcError("Geen geldige NFC tag gevonden.");
+  // --- Render Eye Modal ---
+  const renderEyeModal = () => {
+    if (!eyeModalVisible || !eyeTractor) return null;
+    // Find the combination for this tractor
+    const combination = combinations.find((c) => c.tractorId === eyeTractor.id);
+    // Get all gekoppelde werktuigen (equipment IDs)
+    const gekoppeldeWerktuigen =
+      combination && combination.equipmentIds ? combination.equipmentIds : [];
+
+    // Handler to delete werktuig from combination (no confirmation)
+    const handleDeleteWerktuigFromCombination = async (werktuigId) => {
+      if (!combination) return;
+      try {
+        // Remove from equipmentIds
+        const newEquipmentIds = (combination.equipmentIds || []).filter(
+          (id) => id !== werktuigId
+        );
+        // Remove mapping field using Firestore deleteField()
+        const updateObj = { equipmentIds: newEquipmentIds };
+        updateObj[werktuigId] = deleteField();
+        const combinationRef = doc(db, COMBINATIONS_COLLECTION, combination.id);
+        await updateDoc(combinationRef, updateObj);
+        // Refetch combinations to ensure UI is in sync with Firestore
+        fetchCombinations();
+        showMessage({
+          message: "Werktuig verwijderd uit combinatie",
+          type: "success",
+        });
+      } catch (error) {
+        showMessage({
+          message: "Fout bij verwijderen werktuig",
+          description: error.message,
+          type: "danger",
+        });
       }
-    } catch (e) {
-      setNfcError("NFC scan geannuleerd of mislukt.");
-    } finally {
-      setNfcScanning(false);
-      NfcManager.cancelTechnologyRequest().catch(() => {});
-    }
+    };
+
+    return (
+      <Modal
+        visible={eyeModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEyeModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Gekoppelde werktuigen voor {eyeTractor.name}
+            </Text>
+            {gekoppeldeWerktuigen.length === 0 ? (
+              <View style={styles.emptySelectionList}>
+                <Text>Geen gekoppelde werktuigen</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={gekoppeldeWerktuigen}
+                keyExtractor={(id) => id}
+                renderItem={({ item }) => {
+                  const werktuig = getEquipmentInfo(item);
+                  if (!werktuig) return null;
+                  return (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: 14,
+                        backgroundColor: "#f7f7f7",
+                        borderRadius: 10,
+                        padding: 10,
+                      }}
+                    >
+                      {werktuig.imageUri ? (
+                        <Image
+                          source={{ uri: werktuig.imageUri }}
+                          style={{
+                            width: 54,
+                            height: 54,
+                            borderRadius: 8,
+                            marginRight: 14,
+                            backgroundColor: "#eee",
+                          }}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            width: 54,
+                            height: 54,
+                            borderRadius: 8,
+                            backgroundColor: "#eee",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            marginRight: 14,
+                          }}
+                        >
+                          <Text>Geen</Text>
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+                          {werktuig.name}
+                        </Text>
+                        <Text style={{ color: "#666", fontSize: 14 }}>
+                          Type: {werktuig.type}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => {
+                          // Open koppeling mapping modal for this werktuig
+                          handleOpenKoppelingMapping(
+                            werktuig,
+                            eyeTractor,
+                            combination.id
+                          );
+                          setEyeModalVisible(false);
+                        }}
+                      >
+                        <Text style={{ fontSize: 22, marginLeft: 8 }}>✏️</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() =>
+                          handleDeleteWerktuigFromCombination(item)
+                        }
+                        style={{ marginLeft: 8 }}
+                      >
+                        <Text style={{ fontSize: 22, color: "#e53935" }}>
+                          🗑️
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                }}
+                style={{ marginBottom: 18, marginTop: 8 }}
+              />
+            )}
+            <TouchableOpacity
+              style={[styles.modalButton, styles.closeButton]}
+              onPress={() => setEyeModalVisible(false)}
+            >
+              <Text style={styles.buttonText}>Sluiten</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
   };
 
   if (loading && combinations.length === 0) {
@@ -1722,5 +1789,156 @@ const handleAddKoppelingPair = () => {
     ]);
     setPendingTractorKoppeling(null);
     setPendingWerktuigKoppeling(null);
+  }
+};
+
+// --- Save Koppeling Mapping (stub, no-op for now) ---
+// Removed duplicate handleSaveKoppelingMapping to resolve redeclaration error.
+
+// --- NFC SCAN HANDLER ---
+const handleScanKoppeling = async () => {
+  setNfcScanError("");
+  try {
+    // Step 1: Scan tractor NFC tag
+    setNfcScanStep({ tractor: null, werktuig: null });
+    await NfcManager.requestTechnology(NfcTech.Ndef, {
+      alertMessage: "Scan een tractor NFC tag",
+    });
+    const tractorTag = await NfcManager.getTag();
+    await NfcManager.cancelTechnologyRequest();
+    if (!tractorTag || !tractorTag.id) {
+      setNfcScanError("Geen geldige tractor NFC tag gevonden.");
+      setNfcScanStep(null);
+      return;
+    }
+    // Find tractor koppeling number by matching tag.id in mappingTractor.tags
+    let tractorKoppelingNum = null;
+    if (mappingTractor && mappingTractor.tags) {
+      for (const [koppelingNum, tagId] of Object.entries(mappingTractor.tags)) {
+        if (tagId === tractorTag.id) {
+          tractorKoppelingNum = parseInt(koppelingNum);
+          break;
+        }
+      }
+    }
+    if (!tractorKoppelingNum) {
+      setNfcScanError(
+        "Deze tractor NFC tag is niet gekoppeld aan een koppeling."
+      );
+      setNfcScanStep(null);
+      return;
+    }
+    setHighlightedTractorKoppeling(tractorKoppelingNum);
+    setNfcScanStep({ tractor: tractorTag.id, werktuig: null });
+
+    // Step 2: Scan werktuig NFC tag
+    await NfcManager.requestTechnology(NfcTech.Ndef, {
+      alertMessage: "Scan een werktuig NFC tag",
+    });
+    const werktuigTag = await NfcManager.getTag();
+    await NfcManager.cancelTechnologyRequest();
+    if (!werktuigTag || !werktuigTag.id) {
+      setNfcScanError("Geen geldige werktuig NFC tag gevonden.");
+      setNfcScanStep(null);
+      setHighlightedTractorKoppeling(null);
+      return;
+    }
+    // Find werktuig koppeling number by matching tag.id in mappingWerktuig.tags
+    let werktuigKoppelingNum = null;
+    if (mappingWerktuig && mappingWerktuig.tags) {
+      for (const [koppelingNum, tagId] of Object.entries(
+        mappingWerktuig.tags
+      )) {
+        if (tagId === werktuigTag.id) {
+          werktuigKoppelingNum = parseInt(koppelingNum);
+          break;
+        }
+      }
+    }
+    if (!werktuigKoppelingNum) {
+      setNfcScanError(
+        "Deze werktuig NFC tag is niet gekoppeld aan een koppeling."
+      );
+      setNfcScanStep(null);
+      setHighlightedTractorKoppeling(null);
+      return;
+    }
+    setHighlightedWerktuigKoppeling(werktuigKoppelingNum);
+    setNfcScanStep({ tractor: tractorTag.id, werktuig: werktuigTag.id });
+
+    // Check if this pair is already combined
+    const alreadyCombined = mappingPairs.some(
+      (p) =>
+        p.tractor === tractorKoppelingNum || p.werktuig === werktuigKoppelingNum
+    );
+    if (alreadyCombined) {
+      setNfcScanError("Deze koppeling is al gecombineerd.");
+      setNfcScanStep(null);
+      setHighlightedTractorKoppeling(null);
+      setHighlightedWerktuigKoppeling(null);
+      return;
+    }
+    // Add to mappingPairs
+    setMappingPairs((prev) => [
+      ...prev,
+      { tractor: tractorKoppelingNum, werktuig: werktuigKoppelingNum },
+    ]);
+    // Remove from remaining lists
+    setRemainingTractorKoppelingen((prev) =>
+      prev.filter((n) => n !== tractorKoppelingNum)
+    );
+    setRemainingWerktuigKoppelingen((prev) =>
+      prev.filter((n) => n !== werktuigKoppelingNum)
+    );
+    // Reset highlights after a short delay
+    setTimeout(() => {
+      setHighlightedTractorKoppeling(null);
+      setHighlightedWerktuigKoppeling(null);
+      setNfcScanStep(null);
+    }, 1200);
+  } catch (e) {
+    setNfcScanError("NFC scan geannuleerd of mislukt.");
+    setNfcScanStep(null);
+    setHighlightedTractorKoppeling(null);
+    setHighlightedWerktuigKoppeling(null);
+    NfcManager.cancelTechnologyRequest().catch(() => {});
+  }
+};
+
+// --- Save Koppeling Mapping to Firestore ---
+const handleSaveKoppelingMapping = async () => {
+  if (!mappingCombinationId || !mappingWerktuig) return;
+  try {
+    setSavingMapping(true);
+    // Prepare mapping object: { werktuigId: { tractorKoppeling: werktuigKoppeling, ... } }
+    const mappingObj = {};
+    mappingPairs.forEach((pair) => {
+      mappingObj[pair.tractor] = pair.werktuig;
+    });
+    // Save to Firestore under the combination document, under the werktuig id
+    const combinationRef = doc(
+      db,
+      COMBINATIONS_COLLECTION,
+      mappingCombinationId
+    );
+    await updateDoc(combinationRef, {
+      [mappingWerktuig.id]: mappingObj,
+    });
+    showMessage({ message: "Koppelingen opgeslagen", type: "success" });
+    setKoppelingMappingModalVisible(false);
+    setMappingPairs([]);
+    setRemainingTractorKoppelingen([]);
+    setRemainingWerktuigKoppelingen([]);
+    setHighlightedTractorKoppeling(null);
+    setHighlightedWerktuigKoppeling(null);
+    setNfcScanStep(null);
+  } catch (error) {
+    showMessage({
+      message: "Fout bij opslaan koppelingen",
+      description: error.message,
+      type: "danger",
+    });
+  } finally {
+    setSavingMapping(false);
   }
 };
