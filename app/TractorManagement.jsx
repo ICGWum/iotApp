@@ -382,39 +382,40 @@ export default function TractorManagement({ navigation }) {
     }
   };
 
-  // const scanNfcTag = async (koppelingNum) => {
-  //   try {
-  //     await NfcManager.start();
-  //     await NfcManager.requestTechnology(NfcTech.Ndef);
-  //     const tag = await NfcManager.getTag();
-  //     const tagId =
-  //       tag.id ||
-  //       (tag.ndefMessage && tag.ndefMessage[0]?.id) ||
-  //       `NFC_TAG_${Date.now()}`;
-  //     setScannedTags((prev) => ({ ...prev, [koppelingNum]: tagId }));
-  //     showMessage({
-  //       message: `Koppeling ${koppelingNum} gescand!`,
-  //       type: "success",
-  //     });
-  //   } catch (e) {
-  //     showMessage({ message: `Scan geannuleerd of mislukt`, type: "warning" });
-  //   } finally {
-  //     NfcManager.cancelTechnologyRequest();
-  //   }
-  // };
   const scanNfcTag = async (koppelingNum) => {
-    // MOCK: Simulate a scan with a timeout and fake tag ID
-    setTimeout(() => {
-      setScannedTags((prev) => ({
-        ...prev,
-        [koppelingNum]: `FAKE_TAG_ID_${koppelingNum}_${Date.now()}`,
-      }));
+    try {
+      await NfcManager.start();
+      await NfcManager.requestTechnology(NfcTech.Ndef);
+      const tag = await NfcManager.getTag();
+      const tagId =
+        tag.id ||
+        (tag.ndefMessage && tag.ndefMessage[0]?.id) ||
+        `NFC_TAG_${Date.now()}`;
+      setScannedTags((prev) => ({ ...prev, [koppelingNum]: tagId }));
       showMessage({
-        message: `Koppeling ${koppelingNum} gescand! (gesimuleerd)`,
+        message: `Koppeling ${koppelingNum} gescand!`,
         type: "success",
       });
-    }, 500);
+    } catch (e) {
+      showMessage({ message: `Scan geannuleerd of mislukt`, type: "warning" });
+    } finally {
+      NfcManager.cancelTechnologyRequest();
+    }
   };
+
+  // const scanNfcTag = async (koppelingNum) => {
+  //   // MOCK: Simulate a scan with a timeout and fake tag ID
+  //   setTimeout(() => {
+  //     setScannedTags((prev) => ({
+  //       ...prev,
+  //       [koppelingNum]: `FAKE_TAG_ID_${koppelingNum}_${Date.now()}`,
+  //     }));
+  //     showMessage({
+  //       message: `Koppeling ${koppelingNum} gescand! (gesimuleerd)`,
+  //       type: "success",
+  //     });
+  //   }, 500);
+  // };
 
   if (loading && tractors.length === 0) {
     return (
