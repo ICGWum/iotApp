@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { View, Button, Text, StyleSheet, Modal, TouchableOpacity, ScrollView, Pressable, Image, ActivityIndicator } from "react-native";
 import { db } from "./Firebase"; // Import your Firebase configuration
 import { collection, getDocs, limit, query, doc, getDoc } from "firebase/firestore";
+import NfcManager, {NfcTech} from 'react-native-nfc-manager';
+import { Platform } from "react-native";
 
 const tractorImg = { uri: "https://img.icons8.com/ios-filled/100/tractor.png" };
 const equipmentImg = { uri: "https://img.icons8.com/ios-filled/100/plough.png" };
@@ -35,6 +37,8 @@ export default function MedewerkerScreen({ navigation }) {
   const unusedTractorNumbers = allTractorNumbers.filter(n => !usedTractorNumbers.includes(n));
   const unusedEquipmentNumbers = allEquipmentNumbers.filter(n => !usedEquipmentNumbers.includes(n));
 
+  const [highlightedTractor, setHighlightedTractor] = useState(null);
+  const [highlightedEquipment, setHighlightedEquipment] = useState(null);
 
   // Fetch first tractor from Firestore and set koppelingen
   const handleTractorPress = async () => {
@@ -96,6 +100,12 @@ useEffect(() => {
   };
   fetchCombination();
 }, [selectedTractorName, selectedEquipmentName]);
+
+useEffect(() => {
+  if (Platform.OS !== "web") {
+    NfcManager.start();
+  }
+}, []);
 
 console.log("connectorMapping", connectorMapping);
 console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equipmentConnectors);
@@ -204,7 +214,8 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
                         {/* Tractor ball */}
                         <View style={[
                           styles.connectorBallWithNumber,
-                          isConnected && { backgroundColor: "green" }
+                          isConnected && { backgroundColor: "green" },
+                          highlightedTractor === i && { backgroundColor: "yellow" }
                         ]}>
                           <Text style={styles.connectorBallNumber}>{tractor}</Text>
                         </View>
@@ -219,11 +230,12 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
                         {/* Equipment ball */}
                         <View style={[
                           styles.connectorBallWithNumber,
-                          isConnected && { backgroundColor: "green" }
+                          isConnected && { backgroundColor: "green" },
+                          highlightedEquipment === i && { backgroundColor: "yellow" }
                         ]}>
                           <Text style={styles.connectorBallNumber}>{equipment}</Text>
                         </View>
-                        {/* Instructions button at the end of the row */}
+                        {/* Instructions button */}
                         <TouchableOpacity
                           style={[styles.instructionsButton, { marginLeft: 12 }]}
                           onPress={() => setSelectedInstruction(i + 1)}
@@ -278,21 +290,40 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
               {/* Add more modal content here if needed */}
               <Button
                 title="verbinding"
-                onPress={() => {
-                  const pairs = Object.entries(connectorMapping);
-                  console.log("Pressed verbinding", { currentConnectionIndex, pairs });
-                  if (currentConnectionIndex < pairs.length) {
-                    setUserConnections([
-                      ...userConnections,
-                      { tractor: pairs[currentConnectionIndex][0], equipment: pairs[currentConnectionIndex][1] }
-                    ]);
-                    setCurrentConnectionIndex(currentConnectionIndex + 1);
+                onPress={async () => {
+                  try {
+                    await NfcManager.requestTechnology(NfcTech.Ndef);
+                    const tag = await NfcManager.getTag();
+                    if (!tag || !tag.id) {
+                      alert("Geen NFC tag gevonden.");
+                      await NfcManager.cancelTechnologyRequest();
+                      return;
+                    }
+                    // Find index in tractorTags or equipmentTags
+                    const tractorIdx = tractorTags.indexOf(tag.id);
+                    const equipmentIdx = equipmentTags.indexOf(tag.id);
+
+                    if (tractorIdx !== -1) {
+                      setHighlightedTractor(tractorIdx);
+                      setHighlightedEquipment(null);
+                      await NfcManager.cancelTechnologyRequest();
+                      return;
+                    }
+                    if (equipmentIdx !== -1) {
+                      setHighlightedEquipment(equipmentIdx);
+                      setHighlightedTractor(null);
+                      await NfcManager.cancelTechnologyRequest();
+                      return;
+                    }
+                    alert("Tag niet gevonden in geselecteerde tractor of werktuig.");
+                    setHighlightedTractor(null);
+                    setHighlightedEquipment(null);
+                    await NfcManager.cancelTechnologyRequest();
+                  } catch (ex) {
+                    await NfcManager.cancelTechnologyRequest();
+                    alert("NFC scan geannuleerd of mislukt.");
                   }
                 }}
-                // disabled={
-                //   currentConnectionIndex >= Object.entries(connectorMapping).length ||
-                //   Object.entries(connectorMapping).length === 0
-                // }
               />
             </ScrollView>
             <View style={{
@@ -319,26 +350,45 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
                 }}
               />
               <Button
-                title="Volgende"
+                title="verbinding"
                 onPress={async () => {
-                  if (selectedEquipmentName) {
-                    const docRef = doc(db, "equipment", selectedEquipmentName);
-                    const docSnap = await getDoc(docRef);
-                    if (docSnap.exists()) {
-                      setDebiet(docSnap.get("debiet"));
-                      setDruk(docSnap.get("druk"));
-                    } else {
-                      setDebiet("Onbekend");
-                      setDruk("Onbekend");
-                    }
+                  if (Platform.OS === "web") {
+                    alert("NFC werkt alleen op een mobiel apparaat.");
+                    return;
                   }
-                  setShowNextPage(true);
+                  try {
+                    await NfcManager.requestTechnology(NfcTech.Ndef);
+                    const tag = await NfcManager.getTag();
+                    if (!tag || !tag.id) {
+                      alert("Geen NFC tag gevonden.");
+                      await NfcManager.cancelTechnologyRequest();
+                      return;
+                    }
+                    // Find index in tractorTags or equipmentTags
+                    const tractorIdx = tractorTags.indexOf(tag.id);
+                    const equipmentIdx = equipmentTags.indexOf(tag.id);
+
+                    if (tractorIdx !== -1) {
+                      setHighlightedTractor(tractorIdx);
+                      setHighlightedEquipment(null);
+                      await NfcManager.cancelTechnologyRequest();
+                      return;
+                    }
+                    if (equipmentIdx !== -1) {
+                      setHighlightedEquipment(equipmentIdx);
+                      setHighlightedTractor(null);
+                      await NfcManager.cancelTechnologyRequest();
+                      return;
+                    }
+                    alert("Tag niet gevonden in geselecteerde tractor of werktuig.");
+                    setHighlightedTractor(null);
+                    setHighlightedEquipment(null);
+                    await NfcManager.cancelTechnologyRequest();
+                  } catch (ex) {
+                    await NfcManager.cancelTechnologyRequest();
+                    alert("NFC scan geannuleerd of mislukt.");
+                  }
                 }}
-                disabled={
-                  userConnections.length !== Object.entries(connectorMapping).length ||
-                  !selectedTractorName ||
-                  !selectedEquipmentName
-                }
               />
             </View>
           </>
