@@ -42,38 +42,78 @@ export default function MedewerkerScreen({ navigation }) {
 
   // Fetch first tractor from Firestore and set koppelingen
   const handleTractorPress = async () => {
-  setLoadingTractor(true);
+  if (Platform.OS === "web") {
+    alert("NFC werkt alleen op een mobiel apparaat.");
+    return;
+  }
   try {
-    const q = query(collection(db, "tractors"), limit(1));
+    await NfcManager.requestTechnology(NfcTech.Ndef);
+    const tag = await NfcManager.getTag();
+    await NfcManager.cancelTechnologyRequest();
+    if (!tag || !tag.id) {
+      alert("Geen NFC tag gevonden.");
+      return;
+    }
+    // Search all tractors for a matching tag
+    const q = query(collection(db, "tractors"));
     const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      const doc = snapshot.docs[0];
-      const koppelingen = doc.get("aantalKoppelingen") || 0;
-      setTractorConnectors(koppelingen);
-      setSelectedTractorName(doc.id); // Use doc.id for name (e.g., 'tractor-1')
-      setTractorTags(doc.get("tags") || []);
+    let found = false;
+    snapshot.forEach((docSnap) => {
+      if (docSnap.get("tag") === tag.id) {
+        const koppelingen = docSnap.get("aantalKoppelingen") || 0;
+        setTractorConnectors(koppelingen);
+        setSelectedTractorName(docSnap.id);
+        setTractorTags(docSnap.get("tags") || []);
+        found = true;
+      }
+    });
+    if (!found) {
+      alert("Geen tractor gevonden met deze NFC tag.");
     }
   } catch (error) {
+    await NfcManager.cancelTechnologyRequest();
+    alert("Fout bij het scannen van NFC of ophalen van tractor.");
     console.error("Error fetching tractor:", error);
   }
   setLoadingTractor(false);
 };
 
 const handleEquipmentPress = async () => {
+  if (Platform.OS === "web") {
+    alert("NFC werkt alleen op een mobiel apparaat.");
+    return;
+  }
   try {
-    const q = query(collection(db, "equipment"), limit(1));
+    await NfcManager.requestTechnology(NfcTech.Ndef);
+    const tag = await NfcManager.getTag();
+    await NfcManager.cancelTechnologyRequest();
+    if (!tag || !tag.id) {
+      alert("Geen NFC tag gevonden.");
+      return;
+    }
+    // Search all equipment for a matching tag
+    const q = query(collection(db, "equipment"));
     const snapshot = await getDocs(q);
-    if (!snapshot.empty) {
-      const doc = snapshot.docs[0];
-      const koppelingen = doc.get("aantalKoppelingen") || 0;
-      setSelectedEquipmentName(doc.id); // Use doc.id for name (e.g., 'werktuig-1')
-      setEquipmentConnectors(koppelingen);
-      setEquipmentTags(doc.get("tags") || []);
+    let found = false;
+    snapshot.forEach((docSnap) => {
+      if (docSnap.get("tag") === tag.id) {
+        const koppelingen = docSnap.get("aantalKoppelingen") || 0;
+        setSelectedEquipmentName(docSnap.id);
+        setEquipmentConnectors(koppelingen);
+        setEquipmentTags(docSnap.get("tags") || []);
+        found = true;
+      }
+    });
+    if (!found) {
+      alert("Geen apparaat gevonden met deze NFC tag.");
     }
   } catch (error) {
+    await NfcManager.cancelTechnologyRequest();
+    alert("Fout bij het scannen van NFC of ophalen van apparaat.");
     console.error("Error fetching equipment:", error);
   }
 };
+
 
 useEffect(() => {
   const fetchCombination = async () => {
@@ -84,11 +124,29 @@ useEffect(() => {
         if (docSnap.exists()) {
           // Get mapping array for this equipment
           const mapping = docSnap.get(selectedEquipmentName) || [];
+          if (!mapping.length) {
+            // Combination not available
+            alert("Deze combinatie is niet beschikbaar.");
+            setSelectedEquipmentName("");
+            setEquipmentConnectors(0);         // <-- Add this line
+            setEquipmentTags([]);              // <-- And this line
+            setConnectorMapping([]);
+            setInstructions({});
+            return;
+          }
           setConnectorMapping(mapping);
 
           // Get instructions for this equipment
           const instructionsField = docSnap.get(selectedEquipmentName + "i") || {};
           setInstructions(instructionsField);
+        } else {
+          // Combination document does not exist
+          alert("Deze combinatie is niet beschikbaar.");
+          setSelectedEquipmentName("");
+          setEquipmentConnectors(0);         // <-- Add this line
+          setEquipmentTags([]);              // <-- And this line
+          setConnectorMapping([]);
+          setInstructions({});
         }
       } catch (error) {
         console.error("Error fetching combination/instructions:", error);
@@ -203,7 +261,7 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
 
               {/* Connectors visualization with numbers */}
               <View style={styles.connectorsRow}>
-                <View style={{ flex: 1 }}>
+                <View style={styles.connectorColumn}>
                   {/* Connected (blue) rows with ? button */}
                   {Object.entries(connectorMapping).map(([tractor, equipment], i) => {
                     const isConnected = userConnections.some(
@@ -291,6 +349,10 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
               <Button
                 title="verbinding"
                 onPress={async () => {
+                  if (Platform.OS === "web") {
+                    alert("NFC werkt alleen op een mobiel apparaat.");
+                    return;
+                  }
                   try {
                     await NfcManager.requestTechnology(NfcTech.Ndef);
                     const tag = await NfcManager.getTag();
@@ -350,45 +412,26 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
                 }}
               />
               <Button
-                title="verbinding"
+                title="Volgende"
                 onPress={async () => {
-                  if (Platform.OS === "web") {
-                    alert("NFC werkt alleen op een mobiel apparaat.");
-                    return;
+                  if (selectedEquipmentName) {
+                    const docRef = doc(db, "equipment", selectedEquipmentName);
+                    const docSnap = await getDoc(docRef);
+                    if (docSnap.exists()) {
+                      setDebiet(docSnap.get("debiet"));
+                      setDruk(docSnap.get("druk"));
+                    } else {
+                      setDebiet("Onbekend");
+                      setDruk("Onbekend");
+                    }
                   }
-                  try {
-                    await NfcManager.requestTechnology(NfcTech.Ndef);
-                    const tag = await NfcManager.getTag();
-                    if (!tag || !tag.id) {
-                      alert("Geen NFC tag gevonden.");
-                      await NfcManager.cancelTechnologyRequest();
-                      return;
-                    }
-                    // Find index in tractorTags or equipmentTags
-                    const tractorIdx = tractorTags.indexOf(tag.id);
-                    const equipmentIdx = equipmentTags.indexOf(tag.id);
-
-                    if (tractorIdx !== -1) {
-                      setHighlightedTractor(tractorIdx);
-                      setHighlightedEquipment(null);
-                      await NfcManager.cancelTechnologyRequest();
-                      return;
-                    }
-                    if (equipmentIdx !== -1) {
-                      setHighlightedEquipment(equipmentIdx);
-                      setHighlightedTractor(null);
-                      await NfcManager.cancelTechnologyRequest();
-                      return;
-                    }
-                    alert("Tag niet gevonden in geselecteerde tractor of werktuig.");
-                    setHighlightedTractor(null);
-                    setHighlightedEquipment(null);
-                    await NfcManager.cancelTechnologyRequest();
-                  } catch (ex) {
-                    await NfcManager.cancelTechnologyRequest();
-                    alert("NFC scan geannuleerd of mislukt.");
-                  }
+                  setShowNextPage(true);
                 }}
+                disabled={
+                  userConnections.length !== Object.entries(connectorMapping).length ||
+                  !selectedTractorName ||
+                  !selectedEquipmentName
+                }
               />
             </View>
           </>
@@ -521,8 +564,9 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   connectorColumn: {
-  alignItems: "center",
-  alignSelf: "flex-start",
+    alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
   },
   connectorBall: {
     width: 24,
