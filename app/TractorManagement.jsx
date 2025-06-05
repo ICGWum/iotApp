@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import styles from "./styles/tractor";
 import {
   View,
   Text,
@@ -9,6 +10,9 @@ import {
   Modal,
   ScrollView,
   ActivityIndicator,
+  Image,
+  Alert,
+  Animated,
 } from "react-native";
 import { db, deleteDocument } from "./Firebase";
 import {
@@ -22,6 +26,8 @@ import {
 } from "firebase/firestore";
 import { showMessage } from "react-native-flash-message";
 import NfcManager, { NfcTech } from "react-native-nfc-manager";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
 
 const COLLECTION_NAME = "tractors";
 
@@ -45,6 +51,14 @@ export default function TractorManagement({ navigation }) {
   const [scanningIndex, setScanningIndex] = useState(1); // current koppeling being scanned (start at 1)
   const [scannedTags, setScannedTags] = useState({}); // temp storage for scanned NFC ids
   const [scanTargetTractor, setScanTargetTractor] = useState(null); // tractor being scanned
+
+  const [imageUri, setImageUri] = useState("");
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [infoTractor, setInfoTractor] = useState(null);
+  const [expandedTags, setExpandedTags] = useState({}); // {tractorId: true/false}
+
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [deleteAnim] = useState(new Animated.Value(0));
 
   const generateNextTractorId = async () => {
     try {
@@ -75,6 +89,7 @@ export default function TractorManagement({ navigation }) {
         orderBy("createdAt", "desc")
       );
       const querySnapshot = await getDocs(q);
+
       const tractorList = querySnapshot.docs.map((doc) => ({
         id: doc.id,
         ...doc.data(),
@@ -131,8 +146,21 @@ export default function TractorManagement({ navigation }) {
     setEditMode(false);
   };
 
+  const handlePickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+    if (!result.canceled && result.assets && result.assets[0]?.uri) {
+      setImageUri(result.assets[0].uri);
+    }
+  };
+
   const handleAddTractor = () => {
     resetForm();
+    setImageUri("");
     setModalVisible(true);
   };
 
@@ -148,6 +176,7 @@ export default function TractorManagement({ navigation }) {
       tractor.aantalKoppelingen ? tractor.aantalKoppelingen.toString() : ""
     );
     setTags(tractor.tags || {});
+    setImageUri(tractor.imageUri || "");
     setEditMode(true);
     setModalVisible(true);
   };
@@ -161,7 +190,14 @@ export default function TractorManagement({ navigation }) {
       });
       return;
     }
-
+    if (!imageUri) {
+      showMessage({
+        message: "Afbeelding vereist",
+        description: "Upload een afbeelding van de tractor",
+        type: "warning",
+      });
+      return;
+    }
     try {
       const tractorData = {
         name,
@@ -174,18 +210,40 @@ export default function TractorManagement({ navigation }) {
           ? parseInt(aantalKoppelingen)
           : null,
         tags,
+        imageUri,
         updatedAt: new Date(),
       };
 
+      let tractorId = name.trim();
+      if (!tractorId) {
+        showMessage({
+          message: "Naam is verplicht als ID",
+          type: "warning",
+        });
+        return;
+      }
+
       if (editMode && currentTractor) {
-        const tractorRef = doc(db, COLLECTION_NAME, currentTractor.id);
-        await updateDoc(tractorRef, tractorData);
+        // If name changed, delete old doc and create new one
+        if (currentTractor.id !== tractorId) {
+          // Remove old doc
+          await deleteDocument(COLLECTION_NAME, currentTractor.id);
+          // Create new doc with new ID
+          const tractorRef = doc(db, COLLECTION_NAME, tractorId);
+          await setDoc(tractorRef, {
+            ...tractorData,
+            createdAt: currentTractor.createdAt || new Date(),
+          });
+        } else {
+          // Update existing doc
+          const tractorRef = doc(db, COLLECTION_NAME, tractorId);
+          await updateDoc(tractorRef, tractorData);
+        }
         showMessage({ message: "Tractor bijgewerkt", type: "success" });
       } else {
-        tractorData.createdAt = new Date();
-        const newTractorId = await generateNextTractorId();
-        const tractorRef = doc(db, COLLECTION_NAME, newTractorId);
-        await setDoc(tractorRef, tractorData);
+        // New tractor, use name as ID
+        const tractorRef = doc(db, COLLECTION_NAME, tractorId);
+        await setDoc(tractorRef, { ...tractorData, createdAt: new Date() });
         showMessage({ message: "Tractor toegevoegd", type: "success" });
       }
 
@@ -216,50 +274,78 @@ export default function TractorManagement({ navigation }) {
     }
   };
 
-  const renderTractorItem = ({ item }) => (
-    <View style={styles.tractorItem}>
-      <View style={styles.tractorInfo}>
-        <Text style={styles.tractorName}>{item.name}</Text>
-        <Text>Merk: {item.brand}</Text>
-        <Text>Model: {item.model}</Text>
-        {item.serialNumber && <Text>Serienummer: {item.serialNumber}</Text>}
-        {item.power && <Text>Vermogen: {item.power} pk</Text>}
-        {item.year && <Text>Bouwjaar: {item.year}</Text>}
-        {item.aantalKoppelingen && (
-          <Text>Aantal koppelingen: {item.aantalKoppelingen}</Text>
-        )}
-        {item.tags &&
-          Object.entries(item.tags).map(([key, value]) => (
-            <Text key={key}>
-              Koppeling {key}: {value}
+  const handleDeletePress = (tractorId) => {
+    setDeleteConfirmId(tractorId);
+    deleteAnim.setValue(0);
+    Animated.timing(deleteAnim, {
+      toValue: 1,
+      duration: 3000,
+      useNativeDriver: false,
+    }).start(() => {
+      setDeleteConfirmId(null);
+    });
+  };
+
+  const confirmDeleteTractor = (tractorId) => {
+    Alert.alert(
+      "Bevestig verwijderen",
+      "Weet je zeker dat je deze tractor wilt verwijderen?",
+      [
+        { text: "Annuleren", style: "cancel" },
+        {
+          text: "Verwijderen",
+          style: "destructive",
+          onPress: () => deleteTractor(tractorId),
+        },
+      ]
+    );
+  };
+
+  const renderTractorItem = ({ item }) => {
+    return (
+      <View style={styles.tractorItem}>
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {item.imageUri && (
+            <Image
+              source={{ uri: item.imageUri }}
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: 8,
+                backgroundColor: "#eee",
+                marginRight: 12,
+                alignSelf: "center",
+              }}
+              resizeMode="cover"
+            />
+          )}
+          <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
+            <Text
+              style={{ fontWeight: "bold", flexShrink: 1 }}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {item.brand} {item.model}
             </Text>
-          ))}
+            <View style={{ flex: 1 }} />
+            <TouchableOpacity
+              onPress={() => {
+                setInfoTractor(item);
+                setInfoModalVisible(true);
+              }}
+              style={{ marginLeft: 8, alignSelf: "center" }}
+            >
+              <Ionicons
+                name="information-circle-outline"
+                size={28}
+                color="#2196F3"
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
-      <View style={styles.tractorActions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => handleEditTractor(item)}
-        >
-          <Text style={styles.buttonText}>Bewerken</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => deleteTractor(item.id)}
-        >
-          <Text style={styles.buttonText}>Verwijderen</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.actionButton,
-            { backgroundColor: "#FFA500", marginTop: 8 },
-          ]}
-          onPress={() => handleOpenScanModal(item)}
-        >
-          <Text style={styles.buttonText}>Scan koppelingen</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
+    );
+  };
 
   const handleOpenScanModal = (tractor) => {
     setScanTargetTractor(tractor);
@@ -432,7 +518,33 @@ export default function TractorManagement({ navigation }) {
                 keyboardType="numeric"
               />
 
-              {/* Removed the manual tag input fields from here */}
+              <TouchableOpacity
+                style={{
+                  backgroundColor: imageUri ? "#4CAF50" : "#2196F3",
+                  padding: 12,
+                  borderRadius: 6,
+                  alignItems: "center",
+                  marginBottom: 16,
+                }}
+                onPress={handlePickImage}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  {imageUri ? "Afbeelding geselecteerd" : "Afbeelding uploaden"}
+                </Text>
+              </TouchableOpacity>
+              {imageUri ? (
+                <Image
+                  source={{ uri: imageUri }}
+                  style={{
+                    width: 120,
+                    height: 120,
+                    borderRadius: 8,
+                    alignSelf: "center",
+                    marginBottom: 12,
+                  }}
+                  resizeMode="cover"
+                />
+              ) : null}
             </ScrollView>
 
             <View style={styles.modalActions}>
@@ -452,7 +564,6 @@ export default function TractorManagement({ navigation }) {
           </View>
         </View>
       </Modal>
-
       {/* NFC Scan Modal */}
       <Modal
         visible={scanModalVisible}
@@ -559,175 +670,182 @@ export default function TractorManagement({ navigation }) {
           </View>
         </View>
       </Modal>
+      {/* Info Modal */}
+      <Modal
+        visible={infoModalVisible}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setInfoModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Tractor informatie</Text>
+            {infoTractor && (
+              <View>
+                <Text>Naam: {infoTractor.name}</Text>
+                <Text>Merk: {infoTractor.brand}</Text>
+                <Text>Model: {infoTractor.model}</Text>
+                <Text>Serienummer: {infoTractor.serialNumber}</Text>
+                <Text>Aantal koppelingen: {infoTractor.aantalKoppelingen}</Text>
+                <Text>Vermogen: {infoTractor.power}</Text>
+                <Text>Bouwjaar: {infoTractor.year}</Text>
+                {/* Koppelingen/tags mapping, expandable */}
+                {infoTractor.tags &&
+                  Object.keys(infoTractor.tags).length > 0 && (
+                    <View style={{ marginTop: 10 }}>
+                      <Text style={{ fontWeight: "bold" }}>Koppelingen:</Text>
+                      {Object.entries(infoTractor.tags)
+                        .slice(0, expandedTags[infoTractor.id] ? undefined : 4)
+                        .map(([key, value]) => (
+                          <Text key={key}>
+                            Koppeling {key}: {value}
+                          </Text>
+                        ))}
+                      {Object.keys(infoTractor.tags).length > 4 &&
+                        !expandedTags[infoTractor.id] && (
+                          <TouchableOpacity
+                            onPress={() =>
+                              setExpandedTags((prev) => ({
+                                ...prev,
+                                [infoTractor.id]: true,
+                              }))
+                            }
+                          >
+                            <Text style={{ color: "#2196F3", marginTop: 2 }}>
+                              See more...
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      {expandedTags[infoTractor.id] && (
+                        <TouchableOpacity
+                          onPress={() =>
+                            setExpandedTags((prev) => ({
+                              ...prev,
+                              [infoTractor.id]: false,
+                            }))
+                          }
+                        >
+                          <Text style={{ color: "#2196F3", marginTop: 2 }}>
+                            Show less
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+                {/* Action buttons */}
+                <View style={{ marginTop: 24 }}>
+                  <TouchableOpacity
+                    style={[
+                      styles.infoModalButton,
+                      { backgroundColor: "#4CAF50", alignSelf: "center" },
+                    ]}
+                    onPress={() => {
+                      setInfoModalVisible(false);
+                      handleEditTractor(infoTractor);
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#fff",
+                        fontWeight: "bold",
+                        fontSize: 15,
+                      }}
+                    >
+                      Bewerken
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.infoModalButton,
+                      {
+                        backgroundColor: "#f44336",
+                        alignSelf: "center",
+                        width: 240,
+                        overflow: "hidden",
+                      },
+                    ]}
+                    onPress={() => {
+                      if (deleteConfirmId === infoTractor.id) {
+                        setDeleteConfirmId(null);
+                        deleteTractor(infoTractor.id);
+                      } else {
+                        setDeleteConfirmId(infoTractor.id);
+                        setTimeout(() => {
+                          setDeleteConfirmId(null);
+                        }, 3000);
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        right: 0,
+                        bottom: 0,
+                        width: deleteConfirmId === infoTractor.id ? "100%" : 0,
+                        backgroundColor: "rgba(128,128,128,0.4)",
+                        zIndex: 1,
+                        transitionProperty: "width",
+                        transitionDuration: "3s",
+                      }}
+                    />
+                    <Text
+                      style={{
+                        color: "#fff",
+                        fontWeight: "bold",
+                        fontSize: 17,
+                        zIndex: 2,
+                      }}
+                    >
+                      {deleteConfirmId === infoTractor.id
+                        ? "Verwijderen bevestigen"
+                        : "Verwijderen"}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.infoModalButton,
+                      { backgroundColor: "#FFA500", alignSelf: "center" },
+                    ]}
+                    onPress={() => {
+                      setInfoModalVisible(false);
+                      handleOpenScanModal(infoTractor);
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#fff",
+                        fontWeight: "bold",
+                        fontSize: 15,
+                      }}
+                    >
+                      Scan koppelingen
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.infoModalButton,
+                    {
+                      backgroundColor: "#2196F3",
+                      alignSelf: "center",
+                      marginTop: 16,
+                    },
+                  ]}
+                  onPress={() => setInfoModalVisible(false)}
+                >
+                  <Text
+                    style={{ color: "#fff", fontWeight: "bold", fontSize: 15 }}
+                  >
+                    Sluiten
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  headerButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  addButton: {
-    backgroundColor: "#4CAF50",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 4,
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  list: {
-    padding: 16,
-  },
-  tractorItem: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  tractorInfo: {
-    flex: 1,
-  },
-  tractorName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  tractorActions: {
-    flexDirection: "column",
-    justifyContent: "center",
-    gap: 8,
-  },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    alignItems: "center",
-    minWidth: 70,
-  },
-  editButton: {
-    backgroundColor: "#2196F3",
-  },
-  deleteButton: {
-    backgroundColor: "#F44336",
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  emptyText: {
-    fontSize: 18,
-    marginBottom: 8,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 20,
-    width: "100%",
-    maxHeight: "80%",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  formContainer: {
-    maxHeight: 300,
-  },
-  inputLabel: {
-    fontSize: 16,
-    marginBottom: 4,
-    fontWeight: "500",
-  },
-  input: {
-    backgroundColor: "#f9f9f9",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 4,
-    padding: 10,
-    marginBottom: 16,
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 16,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 4,
-    alignItems: "center",
-    marginHorizontal: 8,
-  },
-  cancelButton: {
-    backgroundColor: "#FF0000",
-  },
-  saveButton: {
-    backgroundColor: "#4CAF50",
-  },
-  scanTagButton: {
-    width: "100%",
-    minHeight: 64,
-    borderRadius: 8,
-    justifyContent: "center",
-    alignItems: "center",
-    marginVertical: 16,
-    borderWidth: 2,
-    borderColor: "#bdbdbd",
-  },
-  scanTagButtonDefault: {
-    backgroundColor: "#00bee1",
-  },
-  scanTagButtonScanned: {
-    backgroundColor: "#4CAF50", // green
-    borderColor: "#388E3C",
-  },
-  scanTagButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 22,
-    letterSpacing: 1,
-  },
-});

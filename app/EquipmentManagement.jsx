@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import styles from "./styles/werktuig";
 import {
   View,
   Text,
@@ -10,6 +11,8 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  Image,
+  Animated,
 } from "react-native";
 import { db, deleteDocument } from "./Firebase";
 import {
@@ -22,6 +25,8 @@ import {
   orderBy,
 } from "firebase/firestore";
 import { showMessage } from "react-native-flash-message";
+import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
 
 const COLLECTION_NAME = "equipment";
 
@@ -31,6 +36,8 @@ export default function EquipmentManagement({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [currentEquipment, setCurrentEquipment] = useState(null);
+  const [infoModalVisible, setInfoModalVisible] = useState(false);
+  const [infoEquipment, setInfoEquipment] = useState(null);
 
   const [tags, setTags] = useState({});
   const [scanModalVisible, setScanModalVisible] = useState(false);
@@ -45,28 +52,7 @@ export default function EquipmentManagement({ navigation }) {
   const [debiet, setDebiet] = useState("");
   const [druk, setDruk] = useState("");
   const [aantalKoppelingen, setAantalKoppelingen] = useState("");
-
-  // Generate next equipment ID
-  const generateNextEquipmentId = async () => {
-    try {
-      const querySnapshot = await getDocs(collection(db, COLLECTION_NAME));
-      let highestNumber = 0;
-      querySnapshot.docs.forEach((document) => {
-        const docId = document.id;
-        if (docId.startsWith("werktuig-")) {
-          const numberPart = docId.split("-")[1];
-          const number = parseInt(numberPart);
-          if (!isNaN(number) && number > highestNumber) {
-            highestNumber = number;
-          }
-        }
-      });
-      return `werktuig-${highestNumber + 1}`;
-    } catch (error) {
-      console.error("Error generating equipment ID:", error);
-      return `werktuig-${new Date().getTime()}`;
-    }
-  };
+  const [imageUri, setImageUri] = useState("");
 
   // Fetch all equipment from Firestore
   const fetchEquipment = async () => {
@@ -138,6 +124,7 @@ export default function EquipmentManagement({ navigation }) {
     resetForm();
     setTags({}); // ensure tags are empty for new equipment
     setScannedTags({}); // ensure scannedTags are empty for new equipment
+    setImageUri(""); // reset image
     setModalVisible(true);
   };
 
@@ -154,8 +141,28 @@ export default function EquipmentManagement({ navigation }) {
       equipment.aantalKoppelingen ? equipment.aantalKoppelingen.toString() : ""
     );
     setTags(equipment.tags || {}); // <-- load tags when editing
+    setImageUri(equipment.imageUri || ""); // load image
     setEditMode(true);
     setModalVisible(true);
+  };
+
+  // Open info modal for equipment
+  const handleInfoEquipment = (equipment) => {
+    setInfoEquipment(equipment);
+    setInfoModalVisible(true);
+  };
+
+  // Pick image
+  const handlePickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [4, 3],
+      quality: 1,
+    });
+    if (!result.canceled && result.assets && result.assets[0]?.uri) {
+      setImageUri(result.assets[0].uri);
+    }
   };
 
   // Save equipment (add new or update existing)
@@ -164,6 +171,14 @@ export default function EquipmentManagement({ navigation }) {
       showMessage({
         message: "Verplichte velden ontbreken",
         description: "Naam en type zijn verplicht",
+        type: "warning",
+      });
+      return;
+    }
+    if (!imageUri) {
+      showMessage({
+        message: "Afbeelding vereist",
+        description: "Upload een afbeelding van het werktuig",
         type: "warning",
       });
       return;
@@ -181,26 +196,42 @@ export default function EquipmentManagement({ navigation }) {
         debiet: debiet ? parseFloat(debiet) : null,
         druk: druk ? parseFloat(druk) : null,
         aantalKoppelingen: aantalKoppelingen ? aantalKoppelingen : "",
-        tags: { ...tagsToSave }, // ensure tags mapping is saved
+        tags: { ...tagsToSave },
+        imageUri,
         updatedAt: new Date(),
       };
 
+      const equipmentId = name.trim();
+      if (!equipmentId) {
+        showMessage({
+          message: "Naam is verplicht als ID",
+          type: "warning",
+        });
+        return;
+      }
+
       if (editMode && currentEquipment) {
-        const equipmentRef = doc(db, COLLECTION_NAME, currentEquipment.id);
-        await updateDoc(equipmentRef, equipmentData);
-        showMessage({
-          message: "Werktuig bijgewerkt",
-          type: "success",
-        });
+        // If name changed, delete old doc and create new one
+        if (currentEquipment.id !== equipmentId) {
+          // Delete old
+          await deleteDocument(COLLECTION_NAME, currentEquipment.id);
+          // Create new
+          const equipmentRef = doc(db, COLLECTION_NAME, equipmentId);
+          await setDoc(equipmentRef, {
+            ...equipmentData,
+            createdAt: new Date(),
+          });
+        } else {
+          // Update existing
+          const equipmentRef = doc(db, COLLECTION_NAME, equipmentId);
+          await updateDoc(equipmentRef, equipmentData);
+        }
+        showMessage({ message: "Werktuig bijgewerkt", type: "success" });
       } else {
-        equipmentData.createdAt = new Date();
-        const newEquipmentId = await generateNextEquipmentId();
-        const equipmentRef = doc(db, COLLECTION_NAME, newEquipmentId);
-        await setDoc(equipmentRef, equipmentData);
-        showMessage({
-          message: "Werktuig toegevoegd",
-          type: "success",
-        });
+        // New equipment, use name as ID
+        const equipmentRef = doc(db, COLLECTION_NAME, equipmentId);
+        await setDoc(equipmentRef, { ...equipmentData, createdAt: new Date() });
+        showMessage({ message: "Werktuig toegevoegd", type: "success" });
       }
 
       setModalVisible(false);
@@ -298,69 +329,67 @@ export default function EquipmentManagement({ navigation }) {
 
   // Render equipment item
   const renderEquipmentItem = ({ item }) => (
-    <View style={styles.equipmentItem}>
-      <View style={styles.equipmentInfo}>
-        <Text style={styles.equipmentName}>{item.name}</Text>
-        <Text>Type: {item.type}</Text>
-        {item.brand && <Text>Merk: {item.brand}</Text>}
-        {item.serialNumber && <Text>Serienummer: {item.serialNumber}</Text>}
-        {item.debiet && <Text>Debiet: {item.debiet} l/min</Text>}
-        {item.druk && <Text>Druk: {item.druk} bar</Text>}
-        {item.aantalKoppelingen && (
-          <Text>Aantal koppelingen: {item.aantalKoppelingen}</Text>
-        )}
-        {item.tags && Object.keys(item.tags).length > 0 && (
-          <View style={{ marginTop: 6 }}>
-            <Text style={{ fontWeight: "bold" }}>Koppelingen:</Text>
-            {Object.keys(item.tags)
-              .sort((a, b) => parseInt(a) - parseInt(b))
-              .map((key) => (
-                <Text key={key}>
-                  Koppeling {key}: {item.tags[key]}
-                </Text>
-              ))}
-          </View>
-        )}
-      </View>
-      <View style={styles.equipmentActions}>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.editButton]}
-          onPress={() => handleEditEquipment(item)}
-        >
-          <Text style={styles.buttonText}>Bewerken</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[styles.actionButton, styles.deleteButton]}
-          onPress={() => handleDeleteEquipment(item)}
-        >
-          <Text style={styles.buttonText}>Verwijderen</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
+    <View
+      style={[
+        styles.equipmentItem,
+        {
+          flexDirection: "row",
+          alignItems: "center",
+          paddingVertical: 8,
+          paddingHorizontal: 12,
+          backgroundColor: "#fff",
+          borderRadius: 12,
+          marginBottom: 12,
+        },
+      ]}
+    >
+      {/* Image left - bigger, like tractors */}
+      {item.imageUri ? (
+        <Image
+          source={{ uri: item.imageUri }}
           style={{
-            backgroundColor: "#FF9800", // orange for consistency
-            padding: 10,
-            borderRadius: 6,
-            marginTop: 8,
-            alignItems: "center",
+            width: 80,
+            height: 80,
+            borderRadius: 8,
+            backgroundColor: "#eee",
+            marginRight: 12,
+            alignSelf: "center",
           }}
-          onPress={() => {
-            setCurrentEquipment(item);
-            setTags(item.tags || {});
-            setScannedTags(item.tags || {}); // only prefill with real tags, not fake
-            setAantalKoppelingen(
-              item.aantalKoppelingen ? item.aantalKoppelingen.toString() : ""
-            );
-            setScanningIndex(1);
-            setScanModalVisible(true);
+          resizeMode="cover"
+        />
+      ) : (
+        <View
+          style={{
+            width: 80,
+            height: 80,
+            borderRadius: 8,
+            marginRight: 12,
+            backgroundColor: "#f2f2f2",
           }}
-        >
-          <Text style={{ color: "#fff", fontWeight: "bold" }}>
-            Scan koppelingen
-          </Text>
-        </TouchableOpacity>
-      </View>
+        />
+      )}
+      {/* Name center - show type if available, else name */}
+      <Text style={{ flex: 1, fontWeight: "bold", fontSize: 16 }}>
+        {item.type ? item.type : item.name}
+      </Text>
+      {/* Info icon right */}
+      <TouchableOpacity
+        onPress={() => {
+          setInfoEquipment(item);
+          setInfoModalVisible(true);
+        }}
+        style={{ padding: 4 }}
+      >
+        <Ionicons name="information-circle-outline" size={24} color="#2196F3" />
+      </TouchableOpacity>
     </View>
   );
+
+  // Expansion state for koppelingen
+  const [expandedTags, setExpandedTags] = useState({}); // {equipmentId: true/false}
+  // Delete confirmation state for info modal
+  const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [deleteAnim] = useState(new Animated.Value(0));
 
   if (loading && equipment.length === 0) {
     return (
@@ -377,10 +406,25 @@ export default function EquipmentManagement({ navigation }) {
         <Text style={styles.title}>Werktuigbeheer</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity
-            style={styles.addButton}
+            style={[
+              styles.addButton,
+              {
+                borderRadius: 20,
+                paddingVertical: 8,
+                paddingHorizontal: 16,
+                backgroundColor: "#4CAF50", // Green
+                alignSelf: "center",
+                marginLeft: 16,
+                minWidth: 0,
+              },
+            ]}
             onPress={handleAddEquipment}
           >
-            <Text style={styles.buttonText}>+ Werktuig toevoegen</Text>
+            <Text
+              style={[styles.buttonText, { fontWeight: "bold", fontSize: 15 }]}
+            >
+              + Werktuig toevoegen
+            </Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -420,6 +464,7 @@ export default function EquipmentManagement({ navigation }) {
                 value={name}
                 onChangeText={setName}
                 placeholder="Voer naam werktuig in"
+                editable={!editMode} // Make name read-only when editing
               />
 
               <Text style={styles.inputLabel}>Type *</Text>
@@ -472,6 +517,35 @@ export default function EquipmentManagement({ navigation }) {
                 placeholder="Voer aantal koppelingen in"
                 keyboardType="numeric"
               />
+
+              <Text style={styles.inputLabel}>Afbeelding *</Text>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: imageUri ? "#4CAF50" : "#2196F3",
+                  padding: 12,
+                  borderRadius: 6,
+                  alignItems: "center",
+                  marginBottom: 16,
+                }}
+                onPress={handlePickImage}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  {imageUri ? "Afbeelding geselecteerd" : "Afbeelding uploaden"}
+                </Text>
+              </TouchableOpacity>
+              {imageUri ? (
+                <Image
+                  source={{ uri: imageUri }}
+                  style={{
+                    width: 120,
+                    height: 120,
+                    borderRadius: 8,
+                    alignSelf: "center",
+                    marginBottom: 12,
+                  }}
+                  resizeMode="cover"
+                />
+              ) : null}
 
               {Object.keys(tags).length > 0 && (
                 <View style={{ marginBottom: 12 }}>
@@ -623,170 +697,260 @@ export default function EquipmentManagement({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Info Modal */}
+      <Modal
+        visible={infoModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setInfoModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            {infoEquipment && (
+              <ScrollView style={{ maxHeight: 300 }}>
+                <Text
+                  style={{ fontWeight: "bold", fontSize: 18, marginBottom: 8 }}
+                >
+                  {infoEquipment.type || infoEquipment.name}
+                </Text>
+                {infoEquipment.brand && (
+                  <Text>Merk: {infoEquipment.brand}</Text>
+                )}
+                {infoEquipment.serialNumber && (
+                  <Text>Serienummer: {infoEquipment.serialNumber}</Text>
+                )}
+                {infoEquipment.debiet && (
+                  <Text>Debiet: {infoEquipment.debiet} l/min</Text>
+                )}
+                {infoEquipment.druk && (
+                  <Text>Druk: {infoEquipment.druk} bar</Text>
+                )}
+                {infoEquipment.aantalKoppelingen && (
+                  <Text>
+                    Aantal koppelingen: {infoEquipment.aantalKoppelingen}
+                  </Text>
+                )}
+                {/* Koppelingen/tags mapping, expandable */}
+                {infoEquipment.tags &&
+                  Object.keys(infoEquipment.tags).length > 0 && (
+                    <View style={{ marginTop: 10 }}>
+                      <Text style={{ fontWeight: "bold" }}>Koppelingen:</Text>
+                      {Object.entries(infoEquipment.tags)
+                        .slice(
+                          0,
+                          expandedTags[infoEquipment.id] ? undefined : 4
+                        )
+                        .map(([key, value]) => (
+                          <Text key={key}>
+                            Koppeling {key}: {value}
+                          </Text>
+                        ))}
+                      {Object.keys(infoEquipment.tags).length > 4 &&
+                        !expandedTags[infoEquipment.id] && (
+                          <TouchableOpacity
+                            onPress={() =>
+                              setExpandedTags((prev) => ({
+                                ...prev,
+                                [infoEquipment.id]: true,
+                              }))
+                            }
+                          >
+                            <Text style={{ color: "#2196F3", marginTop: 2 }}>
+                              See more...
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      {expandedTags[infoEquipment.id] && (
+                        <TouchableOpacity
+                          onPress={() =>
+                            setExpandedTags((prev) => ({
+                              ...prev,
+                              [infoEquipment.id]: false,
+                            }))
+                          }
+                        >
+                          <Text style={{ color: "#2196F3", marginTop: 2 }}>
+                            Show less
+                          </Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+              </ScrollView>
+            )}
+            {/* Action buttons stacked vertically */}
+            <View style={{ marginTop: 24 }}>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor: "#4CAF50",
+                    alignSelf: "center",
+                    width: 240,
+                    marginBottom: 12,
+                  },
+                ]}
+                onPress={() => {
+                  setModalVisible(true);
+                  setEditMode(true);
+                  setCurrentEquipment(infoEquipment);
+                  setName(infoEquipment.name || "");
+                  setType(infoEquipment.type || "");
+                  setBrand(infoEquipment.brand || "");
+                  setSerialNumber(infoEquipment.serialNumber || "");
+                  setDebiet(
+                    infoEquipment.debiet ? infoEquipment.debiet.toString() : ""
+                  );
+                  setDruk(
+                    infoEquipment.druk ? infoEquipment.druk.toString() : ""
+                  );
+                  setAantalKoppelingen(
+                    infoEquipment.aantalKoppelingen
+                      ? infoEquipment.aantalKoppelingen.toString()
+                      : ""
+                  );
+                  setTags(infoEquipment.tags || {});
+                  setImageUri(infoEquipment.imageUri || "");
+                  setInfoModalVisible(false);
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: 17,
+                    zIndex: 2,
+                  }}
+                >
+                  Bewerken
+                </Text>
+              </TouchableOpacity>
+              {/* Verwijderen button with confirmation and animated overlay */}
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor: "#f44336",
+                    alignSelf: "center",
+                    width: 240,
+                    marginBottom: 12,
+                    overflow: "hidden",
+                  },
+                ]}
+                onPress={async () => {
+                  if (!infoEquipment) return; // Prevent null error
+                  if (deleteConfirmId === infoEquipment.id) {
+                    await handleDeleteEquipment(infoEquipment);
+                    setInfoModalVisible(false);
+                    setDeleteConfirmId(null);
+                    deleteAnim.setValue(0);
+                  } else {
+                    setDeleteConfirmId(infoEquipment.id);
+                    deleteAnim.setValue(0);
+                    Animated.timing(deleteAnim, {
+                      toValue: 1,
+                      duration: 3000,
+                      useNativeDriver: false,
+                    }).start(() => {
+                      setDeleteConfirmId(null);
+                      deleteAnim.setValue(0);
+                    });
+                  }
+                }}
+                activeOpacity={0.8}
+                disabled={!infoEquipment}
+              >
+                {infoEquipment && deleteConfirmId === infoEquipment.id && (
+                  <Animated.View
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      right: 0,
+                      bottom: 0,
+                      width: deleteAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["100%", "0%"],
+                      }),
+                      backgroundColor: "rgba(128,128,128,0.4)",
+                      zIndex: 1,
+                    }}
+                  />
+                )}
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: 17,
+                    zIndex: 2,
+                  }}
+                >
+                  {infoEquipment && deleteConfirmId === infoEquipment.id
+                    ? "Verwijderen bevestigen"
+                    : "Verwijderen"}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor: "#FF9800",
+                    alignSelf: "center",
+                    width: 240,
+                    marginBottom: 12,
+                  },
+                ]}
+                onPress={() => {
+                  setCurrentEquipment(infoEquipment);
+                  setTags(infoEquipment.tags || {});
+                  setScannedTags(infoEquipment.tags || {});
+                  setAantalKoppelingen(
+                    infoEquipment.aantalKoppelingen
+                      ? infoEquipment.aantalKoppelingen.toString()
+                      : ""
+                  );
+                  setScanningIndex(1);
+                  setScanModalVisible(true);
+                  setInfoModalVisible(false);
+                }}
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: 17,
+                    zIndex: 2,
+                  }}
+                >
+                  Scan koppelingen
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  {
+                    backgroundColor: "#2196F3",
+                    alignSelf: "center",
+                    width: 240,
+                  },
+                ]}
+                onPress={() => setInfoModalVisible(false)}
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: 17,
+                    zIndex: 2,
+                  }}
+                >
+                  Sluiten
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-  },
-  headerButtons: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  addButton: {
-    backgroundColor: "#4CAF50",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 4,
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  list: {
-    padding: 16,
-  },
-  equipmentItem: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  equipmentInfo: {
-    flex: 1,
-  },
-  equipmentName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  equipmentActions: {
-    flexDirection: "column",
-    justifyContent: "center",
-    gap: 8,
-  },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    alignItems: "center",
-    minWidth: 70,
-  },
-  editButton: {
-    backgroundColor: "#2196F3",
-  },
-  deleteButton: {
-    backgroundColor: "#F44336",
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  emptyText: {
-    fontSize: 18,
-    marginBottom: 8,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 20,
-    width: "100%",
-    maxHeight: "80%",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  formContainer: {
-    maxHeight: 300,
-  },
-  inputLabel: {
-    fontSize: 16,
-    marginBottom: 4,
-    fontWeight: "500",
-  },
-  input: {
-    backgroundColor: "#f9f9f9",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 4,
-    padding: 10,
-    marginBottom: 16,
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginTop: 16,
-  },
-  modalButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 4,
-    alignItems: "center",
-    marginHorizontal: 8,
-  },
-  cancelButton: {
-    backgroundColor: "#FF0000",
-  },
-  saveButton: {
-    backgroundColor: "#4CAF50",
-  },
-  scanTagButton: {
-    backgroundColor: "#007bff",
-    paddingVertical: 12,
-    borderRadius: 4,
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  scanTagButtonDefault: {
-    backgroundColor: "#00bee1",
-  },
-  scanTagButtonScanned: {
-    backgroundColor: "#4CAF50",
-  },
-  scanTagButtonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 16,
-  },
-});

@@ -22,7 +22,6 @@ import KoppelenScreen from "./KoppelenScreen";
 import CombinatieConfig from "./CombinatieConfig";
 import Banner from "./Banner";
 import KoppelingTutorial from "./KoppelingTutorial";
-import test_firestore from "./test_firestore";
 import TractorManagement from "./TractorManagement";
 import EquipmentManagement from "./EquipmentManagement";
 
@@ -160,11 +159,6 @@ export default function App() {
           name="KoppelingTutorial"
           component={KoppelingTutorial}
           options={{ headerShown: true, headerTitle: "Koppeling Tutorial" }}
-        />
-        <Stack.Screen
-          name="test_firestore"
-          component={test_firestore}
-          options={{ headerShown: true, headerTitle: "Test Firestore" }}
         />
         <Stack.Screen
           name="TractorManagement"

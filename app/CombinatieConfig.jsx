@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import styles from "./styles/combinatie";
 import {
   View,
   Text,
@@ -10,6 +11,7 @@ import {
   ActivityIndicator,
   TextInput,
   Alert,
+  Image,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { db, deleteDocument } from "./Firebase";
@@ -21,6 +23,8 @@ import {
   doc,
   setDoc,
   updateDoc,
+  FieldValue,
+  deleteField,
 } from "firebase/firestore";
 import { showMessage } from "react-native-flash-message";
 
@@ -47,6 +51,37 @@ export default function CombinatieConfig() {
     useState(false);
   const [currentMappingEquipment, setCurrentMappingEquipment] = useState(null);
   const [connectionMappings, setConnectionMappings] = useState({});
+
+  // --- New state for add combination flow ---
+  const [addComboStep, setAddComboStep] = useState(0); // 0: select tractor, 1: confirm
+
+  // Add state for tractor preview
+  const [tractorPreview, setTractorPreview] = useState(null);
+
+  // --- Settings Modal State ---
+  const [settingsModalVisible, setSettingsModalVisible] = useState(false);
+  const [settingsTractor, setSettingsTractor] = useState(null);
+  const [selectedWerktuigId, setSelectedWerktuigId] = useState(null);
+
+  // --- Eye Modal State ---
+  const [eyeModalVisible, setEyeModalVisible] = useState(false);
+  const [eyeTractor, setEyeTractor] = useState(null);
+
+  // --- Koppeling Mapping Modal State ---
+  const [koppelingMappingModalVisible, setKoppelingMappingModalVisible] =
+    useState(false);
+  const [mappingWerktuig, setMappingWerktuig] = useState(null); // werktuig object
+  const [mappingTractor, setMappingTractor] = useState(null); // tractor object
+  const [mappingPairs, setMappingPairs] = useState([]); // [{tractor: 3, werktuig: 1}, ...]
+  const [remainingWerktuigKoppelingen, setRemainingWerktuigKoppelingen] =
+    useState([]); // [1,2,3,...]
+  const [remainingTractorKoppelingen, setRemainingTractorKoppelingen] =
+    useState([]); // [1,2,3,...]
+  const [savingMapping, setSavingMapping] = useState(false); // ADDED
+  const [mappingCombinationId, setMappingCombinationId] = useState(null); // for db update
+
+  // New state for koppeling mapping error
+  const [koppelingMappingError, setKoppelingMappingError] = useState("");
 
   // Fetch all combinations
   const fetchCombinations = async () => {
@@ -167,6 +202,7 @@ export default function CombinatieConfig() {
   // Open modal for adding new combination
   const handleAddCombination = () => {
     resetForm();
+    setAddComboStep(0);
     setModalVisible(true);
   };
 
@@ -182,51 +218,13 @@ export default function CombinatieConfig() {
     setModalVisible(true);
   };
 
-  // Delete combination using helper from Firebase.jsx
-  // const handleDeleteCombination = (combination) => {
-  //   Alert.alert(
-  //     "Combinatie verwijderen",
-  //     `Weet je zeker dat je '${combination.name}' wilt verwijderen?`,
-  //     [
-  //       { text: "Annuleren", style: "cancel" },
-  //       {
-  //         text: "Verwijderen",
-  //         style: "destructive",
-  //         onPress: async () => {
-  //           const result = await deleteDocument(
-  //             COMBINATIONS_COLLECTION,
-  //             combination.id
-  //           );
-  //           if (result.success) {
-  //             setCombinations((prev) =>
-  //               prev.filter((c) => c.id !== combination.id)
-  //             );
-  //             showMessage({
-  //               message: "Combinatie verwijderd",
-  //               type: "success",
-  //             });
-  //           } else {
-  //             showMessage({
-  //               message: "Fout bij verwijderen",
-  //               description: result.error.message,
-  //               type: "danger",
-  //             });
-  //           }
-  //         },
-  //       },
-  //     ]
-  //   );
-  // };
-
   const handleDeleteCombination = async (combination) => {
     const result = await deleteDocument(
       COMBINATIONS_COLLECTION,
       combination.id
     );
     if (result.success) {
-      setCombinations((prev) =>
-        prev.filter((c) => c.id !== combination.id)
-      );
+      setCombinations((prev) => prev.filter((c) => c.id !== combination.id));
       showMessage({
         message: "Combinatie verwijderd",
         type: "success",
@@ -413,97 +411,113 @@ export default function CombinatieConfig() {
     }
   };
 
+  // New handler for selecting tractor in add flow
+  const handleSelectTractorForCombo = (tractorId) => {
+    setSelectedTractorId(tractorId);
+    setAddComboStep(1);
+  };
+
+  // New handler for creating combination with tractorId as doc id
+  const handleCreateCombinationWithTractor = async () => {
+    if (!selectedTractorId) {
+      showMessage({ message: "Selecteer een tractor", type: "warning" });
+      return;
+    }
+    try {
+      const tractor = getTractorInfo(selectedTractorId);
+      const combinationData = {
+        name: tractor.name,
+        tractorId: selectedTractorId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const combinationRef = doc(
+        db,
+        COMBINATIONS_COLLECTION,
+        selectedTractorId
+      );
+      await setDoc(combinationRef, combinationData);
+      setCombinations((prev) => [
+        { id: selectedTractorId, ...combinationData },
+        ...prev,
+      ]);
+      showMessage({ message: "Combinatie aangemaakt", type: "success" });
+      setModalVisible(false);
+      resetForm();
+    } catch (error) {
+      showMessage({
+        message: "Fout bij aanmaken combinatie",
+        description: error.message,
+        type: "danger",
+      });
+    }
+  };
+
   // Render combination item
   const renderCombinationItem = ({ item }) => {
     const tractor = getTractorInfo(item.tractorId);
+    if (!tractor) return null;
     return (
-      <View style={styles.combinationItem}>
-        <View style={styles.combinationHeader}>
-          <Text style={styles.combinationName}>{item.name}</Text>
-          {item.description && (
-            <Text style={styles.combinationDescription}>
-              {item.description}
-            </Text>
-          )}
-          {tractor && (
-            <Text style={styles.tractorInfo}>
-              Tractor: {tractor.brand} {tractor.model} ({tractor.name})
-            </Text>
-          )}
-        </View>
-
-        <View style={styles.equipmentList}>
-          <Text style={styles.sectionTitle}>Werktuigen:</Text>
-          {item.equipmentIds && item.equipmentIds.length > 0 ? (
-            item.equipmentIds.map((equipId) => {
-              const equip = getEquipmentInfo(equipId);
-              const mappings = item.connectionMappings?.[equipId] || {};
-              return equip ? (
-                <View key={equipId} style={styles.equipmentItemContainer}>
-                  <Text style={styles.equipmentItem}>
-                    • {equip.name} ({equip.type})
-                  </Text>
-                  {Object.entries(mappings).length > 0 && (
-                    <View style={styles.connectionsList}>
-                      <Text style={styles.connectionsTitle}>Koppelingen:</Text>
-                      {Object.entries(mappings).map(
-                        ([werktuigConn, tractorConn]) => (
-                          <Text
-                            key={werktuigConn}
-                            style={styles.connectionItem}
-                          >
-                            Tractor {tractorConn} ←→ Werktuig {werktuigConn}
-                          </Text>
-                        )
-                      )}
-                    </View>
-                  )}
-                </View>
-              ) : null;
-            })
+      <View
+        style={[
+          styles.combinationItem,
+          {
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          },
+        ]}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center" }}>
+          {tractor.imageUri ? (
+            <Image
+              source={{ uri: tractor.imageUri }}
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 12,
+                marginRight: 16,
+                backgroundColor: "#eee",
+              }}
+              resizeMode="contain"
+            />
           ) : (
-            <Text style={styles.noEquipment}>Geen werktuigen gekoppeld</Text>
+            <View
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: 12,
+                backgroundColor: "#eee",
+                justifyContent: "center",
+                alignItems: "center",
+                marginRight: 16,
+              }}
+            >
+              <Text>Geen</Text>
+            </View>
           )}
+          <View>
+            <Text style={{ fontWeight: "bold", fontSize: 18 }}>
+              {tractor.name}
+            </Text>
+            <Text style={{ color: "#666", fontSize: 15 }}>
+              {tractor.brand} {tractor.model}
+            </Text>
+          </View>
         </View>
-
-        <View style={styles.actions}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.editButton]}
-            onPress={() => handleEditCombination(item)}
-          >
-            <Text style={styles.buttonText}>Bewerken</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.deleteButton]}
-            onPress={() => handleDeleteCombination(item)}
-          >
-            <Text style={styles.buttonText}>Verwijderen</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity onPress={() => handleOpenEye(tractor)}>
+          <Text style={{ fontSize: 28, marginLeft: 8, marginRight: 4 }}>
+            👁️
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => handleOpenSettings(tractor)}>
+          <Text style={{ fontSize: 32, marginLeft: 4 }}>⚙️</Text>
+        </TouchableOpacity>
       </View>
     );
   };
 
-  // Render tractor selection item
-  const renderTractorItem = ({ item }) => (
-    <TouchableOpacity
-      style={[
-        styles.selectionItem,
-        selectedTractorId === item.id && styles.selectedItem,
-      ]}
-      onPress={() => {
-        setSelectedTractorId(item.id);
-        setTractorModalVisible(false);
-      }}
-    >
-      <Text style={styles.itemName}>
-        {item.brand} {item.model} ({item.name})
-      </Text>
-      {item.power && <Text>Vermogen: {item.power} pk</Text>}
-    </TouchableOpacity>
-  );
-
-  // Render equipment selection item
+  // Place this above the main return statement
   const renderEquipmentItem = ({ item }) => {
     const tractor = getTractorInfo(selectedTractorId);
     const isCompatible =
@@ -547,10 +561,539 @@ export default function CombinatieConfig() {
     );
   };
 
-  // Update the connection mapping modal component
+  // Open Settings Modal
+  const handleOpenSettings = (tractor) => {
+    setSettingsTractor(tractor);
+    setSelectedWerktuigId(null);
+    setSettingsModalVisible(true);
+  };
+
+  // --- Open Eye Modal ---
+  const handleOpenEye = (tractor) => {
+    setEyeTractor(tractor);
+    setEyeModalVisible(true);
+  };
+
+  // --- Open Koppeling Mapping Modal ---
+  const handleOpenKoppelingMapping = (werktuig, tractor, combinationId) => {
+    // Enforce correct logic
+    if (
+      !tractor.aantalKoppelingen ||
+      !werktuig.aantalKoppelingen ||
+      tractor.aantalKoppelingen < werktuig.aantalKoppelingen
+    ) {
+      let errorMsg = "";
+      if (!tractor.aantalKoppelingen || !werktuig.aantalKoppelingen) {
+        errorMsg =
+          "Aantal koppelingen van tractor en werktuig moeten beide groter dan 0 zijn.";
+      } else if (tractor.aantalKoppelingen < werktuig.aantalKoppelingen) {
+        errorMsg =
+          "Het aantal tractor koppelingen moet groter of gelijk zijn aan het aantal werktuig koppelingen.";
+      }
+      setKoppelingMappingError(errorMsg);
+      setKoppelingMappingModalVisible(true);
+      return;
+    }
+    setMappingWerktuig(werktuig);
+    setMappingTractor(tractor);
+    setMappingCombinationId(combinationId);
+    setMappingPairs([]);
+    setRemainingWerktuigKoppelingen(
+      Array.from({ length: werktuig.aantalKoppelingen }, (_, i) => i + 1)
+    );
+    setRemainingTractorKoppelingen(
+      Array.from({ length: tractor.aantalKoppelingen }, (_, i) => i + 1)
+    );
+    setKoppelingMappingError("");
+    setKoppelingMappingModalVisible(true);
+  };
+
+  // --- Render Koppeling Mapping Modal ---
+  const renderKoppelingMappingModal = () => {
+    if (koppelingMappingError) {
+      return (
+        <Modal
+          visible={koppelingMappingModalVisible}
+          transparent
+          animationType="slide"
+        >
+          <View
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              backgroundColor: "rgba(0,0,0,0.2)",
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: 16,
+                padding: 32,
+                width: 340,
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={{
+                  fontWeight: "bold",
+                  fontSize: 20,
+                  marginBottom: 16,
+                }}
+              >
+                Ongeldige koppeling selectie
+              </Text>
+              <Text style={{ textAlign: "center", marginBottom: 24 }}>
+                {koppelingMappingError}
+              </Text>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#888",
+                  borderRadius: 8,
+                  paddingVertical: 12,
+                  paddingHorizontal: 32,
+                }}
+                onPress={() => {
+                  setKoppelingMappingModalVisible(false);
+                  setKoppelingMappingError("");
+                }}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  Sluiten
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      );
+    }
+    if (!mappingTractor || !mappingWerktuig) return null;
+    const allTractorKoppelingen = Array.from(
+      { length: mappingTractor.aantalKoppelingen },
+      (_, i) => i + 1
+    );
+    const allWerktuigKoppelingen = Array.from(
+      { length: mappingWerktuig.aantalKoppelingen },
+      (_, i) => i + 1
+    );
+    // Sort mappingPairs by tractor koppeling
+    const connectedPairs = [...mappingPairs].sort(
+      (a, b) => a.tractor - b.tractor
+    );
+    if (mappingWerktuig.aantalKoppelingen > mappingTractor.aantalKoppelingen) {
+      return (
+        <Modal
+          visible={koppelingMappingModalVisible}
+          transparent
+          animationType="slide"
+        >
+          <View
+            style={{
+              flex: 1,
+              justifyContent: "center",
+              alignItems: "center",
+              backgroundColor: "rgba(0,0,0,0.2)",
+            }}
+          >
+            <View
+              style={{
+                backgroundColor: "#fff",
+                borderRadius: 16,
+                padding: 32,
+                width: 340,
+                alignItems: "center",
+              }}
+            >
+              <Text
+                style={{
+                  fontWeight: "bold",
+                  fontSize: 20,
+                  marginBottom: 16,
+                }}
+              >
+                Te veel werktuig koppelingen
+              </Text>
+              <Text
+                style={{
+                  textAlign: "center",
+                  marginBottom: 24,
+                }}
+              >
+                Dit werktuig heeft meer koppelingen dan de tractor. Kies een
+                ander werktuig of tractor.
+              </Text>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#888",
+                  borderRadius: 8,
+                  paddingVertical: 12,
+                  paddingHorizontal: 32,
+                }}
+                onPress={() => setKoppelingMappingModalVisible(false)}
+              >
+                <Text style={{ color: "#fff", fontWeight: "bold" }}>
+                  Sluiten
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      );
+    }
+    return (
+      <Modal
+        visible={koppelingMappingModalVisible}
+        transparent
+        animationType="slide"
+      >
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+            alignItems: "center",
+            backgroundColor: "rgba(0,0,0,0.2)",
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: "#fff",
+              borderRadius: 16,
+              padding: 24,
+              width: 370,
+              alignItems: "center",
+            }}
+          >
+            <Text
+              style={{
+                fontWeight: "bold",
+                fontSize: 20,
+                marginBottom: 18,
+                textAlign: "center",
+              }}
+            >
+              Koppelingen scannen (Testscan demo)
+            </Text>
+            <Text
+              style={{
+                color: "#666",
+                marginBottom: 22,
+                textAlign: "center",
+                fontSize: 16,
+              }}
+            >
+              {mappingTractor.name} ↔ {mappingWerktuig.name}
+            </Text>
+            {/* Swapped column titles: Tractor left, Werktuig right */}
+            <View
+              style={{
+                flexDirection: "row",
+                width: "100%",
+                marginBottom: 0,
+              }}
+            >
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text
+                  style={{
+                    fontWeight: "bold",
+                    fontSize: 16,
+                    textAlign: "center",
+                  }}
+                >
+                  Tractor
+                </Text>
+              </View>
+              <View style={{ flex: 1, alignItems: "center" }} />
+              <View style={{ flex: 1, alignItems: "center" }}>
+                <Text
+                  style={{
+                    fontWeight: "bold",
+                    fontSize: 16,
+                    textAlign: "center",
+                  }}
+                >
+                  Werktuig
+                </Text>
+              </View>
+            </View>
+            {/* Koppelingen rows, swapped: Tractor left, Werktuig right */}
+            <View
+              style={{
+                flexDirection: "row",
+                width: "100%",
+                justifyContent: "space-between",
+                minHeight: 180,
+                marginBottom: 18,
+              }}
+            >
+              {/* Tractor koppelingen */}
+              <View style={{ flex: 1, alignItems: "center" }}>
+                {allTractorKoppelingen.map((num) => {
+                  const isPaired = connectedPairs.some(
+                    (p) => p.tractor === num
+                  );
+                  return (
+                    <View
+                      key={num}
+                      style={{
+                        backgroundColor: isPaired ? "#4caf50" : "#eee",
+                        borderRadius: 8,
+                        marginVertical: 4,
+                        width: 38,
+                        height: 38,
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: isPaired ? "#fff" : "#333",
+                          fontWeight: "bold",
+                          textAlign: "center",
+                        }}
+                      >
+                        {num}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+              {/* Center: show mapping pairs, sorted by tractor koppeling */}
+              <View
+                style={{
+                  flex: 1,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 120,
+                }}
+              >
+                {connectedPairs.length === 0 ? (
+                  <Text
+                    style={{
+                      color: "#aaa",
+                      fontSize: 13,
+                      marginTop: 16,
+                      textAlign: "center",
+                    }}
+                  >
+                    Nog geen koppelingen
+                  </Text>
+                ) : (
+                  connectedPairs.map((pair, idx) => (
+                    <View
+                      key={idx}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginVertical: 2,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontWeight: "bold",
+                          color: "#4caf50",
+                          fontSize: 16,
+                          textAlign: "center",
+                        }}
+                      >
+                        Tractor {pair.tractor}
+                      </Text>
+                      <Text
+                        style={{
+                          marginHorizontal: 6,
+                          color: "#333",
+                          fontSize: 16,
+                          textAlign: "center",
+                        }}
+                      >
+                        ↔
+                      </Text>
+                      <Text
+                        style={{
+                          fontWeight: "bold",
+                          color: "#4caf50",
+                          fontSize: 16,
+                          textAlign: "center",
+                        }}
+                      >
+                        Werktuig {pair.werktuig}
+                      </Text>
+                    </View>
+                  ))
+                )}
+              </View>
+              {/* Werktuig koppelingen */}
+              <View style={{ flex: 1, alignItems: "center" }}>
+                {allWerktuigKoppelingen.map((num) => {
+                  const isPaired = connectedPairs.some(
+                    (p) => p.werktuig === num
+                  );
+                  return (
+                    <View
+                      key={num}
+                      style={{
+                        backgroundColor: isPaired ? "#4caf50" : "#eee",
+                        borderRadius: 8,
+                        marginVertical: 4,
+                        width: 38,
+                        height: 38,
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: isPaired ? "#fff" : "#333",
+                          fontWeight: "bold",
+                          textAlign: "center",
+                        }}
+                      >
+                        {num}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </View>
+            {/* Vertically stacked buttons */}
+            <View style={{ width: "100%", marginTop: 18 }}>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#4caf50",
+                  borderRadius: 8,
+                  paddingVertical: 14,
+                  marginBottom: 10,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                onPress={handleTestScan}
+                disabled={
+                  remainingWerktuigKoppelingen.length === 0 ||
+                  remainingTractorKoppelingen.length === 0
+                }
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: 16,
+                    textAlign: "center",
+                  }}
+                >
+                  Testscan
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#bbb",
+                  borderRadius: 8,
+                  paddingVertical: 14,
+                  marginBottom: 10,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                disabled
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: 16,
+                    textAlign: "center",
+                  }}
+                >
+                  Scan tractor koppeling
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{
+                  backgroundColor: "#bbb",
+                  borderRadius: 8,
+                  paddingVertical: 14,
+                  marginBottom: 18,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                disabled
+              >
+                <Text
+                  style={{
+                    color: "#fff",
+                    fontWeight: "bold",
+                    fontSize: 16,
+                    textAlign: "center",
+                  }}
+                >
+                  Scan werktuig koppeling
+                </Text>
+              </TouchableOpacity>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "space-between",
+                }}
+              >
+                <TouchableOpacity
+                  style={{
+                    backgroundColor: "#e53935", // red
+                    borderRadius: 8,
+                    paddingVertical: 12,
+                    paddingHorizontal: 24,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  onPress={() => setKoppelingMappingModalVisible(false)}
+                >
+                  <Text
+                    style={{
+                      color: "#fff",
+                      fontWeight: "bold",
+                      textAlign: "center",
+                    }}
+                  >
+                    Annuleren
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{
+                    backgroundColor:
+                      remainingWerktuigKoppelingen.length === 0
+                        ? "#4caf50"
+                        : "#b7e1c6",
+                    borderRadius: 8,
+                    paddingVertical: 12,
+                    paddingHorizontal: 24,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  onPress={handleSaveKoppelingMapping}
+                  disabled={
+                    remainingWerktuigKoppelingen.length !== 0 || savingMapping
+                  }
+                >
+                  <Text
+                    style={{
+                      color:
+                        remainingWerktuigKoppelingen.length === 0
+                          ? "#fff"
+                          : "#666",
+                      fontWeight: "bold",
+                      textAlign: "center",
+                    }}
+                  >
+                    Opslaan
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Render connection mapping modal for old mapping UI (if still used)
   const renderConnectionMappingModal = () => {
     if (!currentMappingEquipment || !selectedTractorId) return null;
-
     const tractor = getTractorInfo(selectedTractorId);
     const tractorConnections = generateConnectionNumbers(
       tractor.aantalKoppelingen
@@ -575,7 +1118,6 @@ export default function CombinatieConfig() {
               <Text style={styles.subtitle}>
                 {currentMappingEquipment.name} - {tractor.name}
               </Text>
-
               <View style={styles.mappingLegend}>
                 <View style={styles.legendItem}>
                   <View style={styles.legendDot} />
@@ -589,7 +1131,6 @@ export default function CombinatieConfig() {
                 </View>
               </View>
             </View>
-
             <ScrollView
               style={styles.mappingContainer}
               showsVerticalScrollIndicator={true}
@@ -617,11 +1158,9 @@ export default function CombinatieConfig() {
                         </Text>
                       </View>
                     </View>
-
                     <View style={styles.mappingArrowContainer}>
                       <Text style={styles.mappingArrow}>←→</Text>
                     </View>
-
                     <View style={styles.mappingTractor}>
                       <Text style={styles.mappingLabel}>Tractor</Text>
                       <View style={styles.tractorConnectionsGrid}>
@@ -632,7 +1171,6 @@ export default function CombinatieConfig() {
                               styles.tractorConnectionButton,
                               currentMappings[werktuigConn] === tractorConn &&
                                 styles.tractorConnectionButtonSelected,
-                              // Dim if this tractor connection is used by another werktuig connection
                               Object.values(currentMappings).includes(
                                 tractorConn
                               ) &&
@@ -660,7 +1198,6 @@ export default function CombinatieConfig() {
                 );
               })}
             </ScrollView>
-
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.saveButton]}
@@ -669,6 +1206,560 @@ export default function CombinatieConfig() {
                 <Text style={styles.buttonText}>Gereed</Text>
               </TouchableOpacity>
             </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // --- Modified Add Combination Modal ---
+  const renderAddCombinationModal = () => (
+    <Modal
+      visible={modalVisible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setModalVisible(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Nieuwe combinatie toevoegen</Text>
+          <TouchableOpacity
+            style={[
+              styles.modalButton,
+              styles.saveButton,
+              { marginBottom: 20 },
+            ]}
+            onPress={() => setTractorModalVisible(true)}
+          >
+            <Text style={styles.buttonText}>Selecteer een tractor</Text>
+          </TouchableOpacity>
+          {tractorPreview && (
+            <View style={{ alignItems: "center", marginBottom: 24 }}>
+              {tractorPreview.imageUri ? (
+                <Image
+                  source={{ uri: tractorPreview.imageUri }}
+                  style={{
+                    width: 120,
+                    height: 120,
+                    borderRadius: 12,
+                    backgroundColor: "#eee",
+                  }}
+                  resizeMode="contain"
+                  onError={(e) => {
+                    console.log(
+                      "Image load error",
+                      e.nativeEvent.error,
+                      tractorPreview.imageUri
+                    );
+                  }}
+                />
+              ) : (
+                <View
+                  style={{
+                    width: 120,
+                    height: 120,
+                    borderRadius: 12,
+                    backgroundColor: "#eee",
+                    justifyContent: "center",
+                    alignItems: "center",
+                  }}
+                >
+                  <Text>Geen afbeelding</Text>
+                </View>
+              )}
+              <Text style={{ fontSize: 18, fontWeight: "bold", marginTop: 10 }}>
+                {tractorPreview.name}
+              </Text>
+            </View>
+          )}
+          {tractorPreview && (
+            <TouchableOpacity
+              style={[
+                styles.modalButton,
+                styles.saveButton,
+                { marginBottom: 10 },
+              ]}
+              onPress={async () => {
+                try {
+                  const combinationData = {
+                    name: tractorPreview.name,
+                    tractorId: tractorPreview.id,
+                    imageUri: tractorPreview.imageUri || null,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                  };
+                  const combinationRef = doc(
+                    db,
+                    COMBINATIONS_COLLECTION,
+                    tractorPreview.id
+                  );
+                  await setDoc(combinationRef, combinationData);
+                  setCombinations((prev) => [
+                    { id: tractorPreview.id, ...combinationData },
+                    ...prev,
+                  ]);
+                  showMessage({
+                    message: "Combinatie aangemaakt",
+                    type: "success",
+                  });
+                  setModalVisible(false);
+                  setTractorPreview(null);
+                  resetForm();
+                } catch (error) {
+                  showMessage({
+                    message: "Fout bij aanmaken combinatie",
+                    description: error.message,
+                    type: "danger",
+                  });
+                }
+              }}
+            >
+              <Text style={styles.buttonText}>Aanmaken</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.modalButton, styles.cancelButton]}
+            onPress={() => setModalVisible(false)}
+          >
+            <Text style={styles.buttonText}>Annuleren</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // --- Modified Tractor Selection Modal ---
+  const renderTractorSelectionModal = () => (
+    <Modal
+      visible={tractorModalVisible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setTractorModalVisible(false)}
+    >
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Selecteer een tractor</Text>
+          {tractors.length === 0 ? (
+            <View style={styles.emptySelectionList}>
+              <Text>Geen tractoren beschikbaar</Text>
+              <Text>Voeg eerst tractoren toe in tractorbeheer</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={tractors}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={styles.selectionItem}
+                  onPress={() => {
+                    setTractorPreview(item);
+                    setSelectedTractorId(item.id);
+                    setTractorModalVisible(false);
+                  }}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    {item.imageUri ? (
+                      <Image
+                        source={{ uri: item.imageUri }}
+                        style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: 12,
+                          marginRight: 16,
+                          backgroundColor: "#eee",
+                        }}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          width: 72,
+                          height: 72,
+                          borderRadius: 12,
+                          backgroundColor: "#eee",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          marginRight: 16,
+                        }}
+                      >
+                        <Text>Geen</Text>
+                      </View>
+                    )}
+                    <View>
+                      <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+                        {item.name}
+                      </Text>
+                      <Text style={{ color: "#666", fontSize: 14 }}>
+                        {item.brand} {item.model}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              )}
+              keyExtractor={(item) => item.id}
+              style={styles.selectionList}
+            />
+          )}
+          <TouchableOpacity
+            style={[styles.modalButton, styles.closeButton]}
+            onPress={() => setTractorModalVisible(false)}
+          >
+            <Text style={styles.buttonText}>Sluiten</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // --- Render Settings Modal ---
+  const renderSettingsModal = () => {
+    if (!settingsTractor) return null;
+    // Only show werktuigen that fit the koppeling logic
+    const compatibleWerktuigen = equipment.filter(
+      (w) =>
+        w.aantalKoppelingen <= settingsTractor.aantalKoppelingen &&
+        w.id &&
+        w.name
+    );
+    return (
+      <Modal
+        visible={settingsModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setSettingsModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Werktuig koppelen aan {settingsTractor.name}
+            </Text>
+            <FlatList
+              data={compatibleWerktuigen}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <TouchableOpacity
+                  style={[
+                    styles.selectionItem,
+                    selectedWerktuigId === item.id && styles.selectedItem,
+                  ]}
+                  onPress={() => setSelectedWerktuigId(item.id)}
+                >
+                  <View style={{ flexDirection: "row", alignItems: "center" }}>
+                    {item.imageUri ? (
+                      <Image
+                        source={{ uri: item.imageUri }}
+                        style={{
+                          width: 64,
+                          height: 64,
+                          borderRadius: 10,
+                          marginRight: 16,
+                          backgroundColor: "#eee",
+                        }}
+                        resizeMode="contain"
+                      />
+                    ) : (
+                      <View
+                        style={{
+                          width: 64,
+                          height: 64,
+                          borderRadius: 10,
+                          backgroundColor: "#eee",
+                          justifyContent: "center",
+                          alignItems: "center",
+                          marginRight: 16,
+                        }}
+                      >
+                        <Text>Geen</Text>
+                      </View>
+                    )}
+                    <View>
+                      <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+                        {item.name}
+                      </Text>
+                      <Text style={{ color: "#666", fontSize: 14 }}>
+                        {item.type}
+                      </Text>
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              )}
+              style={{ maxHeight: 300, marginBottom: 16 }}
+            />
+            <View style={{ flexDirection: "row", justifyContent: "flex-end" }}>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.cancelButton,
+                  { marginRight: 8 },
+                ]}
+                onPress={() => setSettingsModalVisible(false)}
+              >
+                <Text style={styles.buttonText}>Annuleren</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.saveButton,
+                  { opacity: selectedWerktuigId ? 1 : 0.5 },
+                ]}
+                disabled={!selectedWerktuigId}
+                onPress={handleCombineWerktuig}
+              >
+                <Text style={styles.buttonText}>Combineer</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
+  };
+
+  // Add Werktuig to Combination
+  const handleCombineWerktuig = async () => {
+    if (!settingsTractor || !selectedWerktuigId) return;
+    try {
+      // Find combination for this tractor
+      const combination = combinations.find(
+        (c) => c.tractorId === settingsTractor.id
+      );
+      if (!combination) {
+        showMessage({ message: "Geen combinatie gevonden", type: "danger" });
+        return;
+      }
+      // Update equipmentIds array (add if not present)
+      const prevEquipmentIds = Array.isArray(combination.equipmentIds)
+        ? combination.equipmentIds
+        : [];
+      let newEquipmentIds = prevEquipmentIds;
+      if (!prevEquipmentIds.includes(selectedWerktuigId)) {
+        newEquipmentIds = [...prevEquipmentIds, selectedWerktuigId];
+      }
+      // Add werktuig as empty mapping at the root of the combination document
+      const updateObj = {};
+      updateObj[selectedWerktuigId] = {};
+      updateObj["equipmentIds"] = newEquipmentIds;
+      const combinationRef = doc(db, COMBINATIONS_COLLECTION, combination.id);
+      await updateDoc(combinationRef, updateObj);
+      setCombinations((prev) =>
+        prev.map((c) =>
+          c.id === combination.id
+            ? { ...c, [selectedWerktuigId]: {}, equipmentIds: newEquipmentIds }
+            : c
+        )
+      );
+      showMessage({ message: "Werktuig toegevoegd", type: "success" });
+      setSettingsModalVisible(false);
+    } catch (error) {
+      showMessage({
+        message: "Fout bij toevoegen werktuig",
+        description: error.message,
+        type: "danger",
+      });
+    }
+  };
+
+  // --- Testscan logic for mapping modal ---
+  const handleTestScan = () => {
+    if (
+      remainingWerktuigKoppelingen.length === 0 ||
+      remainingTractorKoppelingen.length === 0
+    )
+      return;
+    const werktuigKoppeling = remainingWerktuigKoppelingen[0];
+    const randomIdx = Math.floor(
+      Math.random() * remainingTractorKoppelingen.length
+    );
+    const tractorKoppeling = remainingTractorKoppelingen[randomIdx];
+    setMappingPairs((prev) => [
+      ...prev,
+      { tractor: tractorKoppeling, werktuig: werktuigKoppeling },
+    ]);
+    setRemainingWerktuigKoppelingen((prev) => prev.slice(1));
+    setRemainingTractorKoppelingen((prev) =>
+      prev.filter((n, idx) => idx !== randomIdx)
+    );
+  };
+
+  // --- Save mapping to Firestore for mapping modal ---
+  const handleSaveKoppelingMapping = async () => {
+    if (!mappingCombinationId || !mappingWerktuig) return;
+    setSavingMapping(true);
+    try {
+      // Build mapping: { tractor_koppeling: werktuig_koppeling, ... } ONLY for scanned pairs
+      const mapping = {};
+      mappingPairs.forEach((pair) => {
+        mapping[pair.tractor] = pair.werktuig;
+      });
+      // Update Firestore: set under the werktuig field
+      const combinationRef = doc(
+        db,
+        COMBINATIONS_COLLECTION,
+        mappingCombinationId
+      );
+      const updateObj = {};
+      updateObj[mappingWerktuig.id] = mapping;
+      await updateDoc(combinationRef, updateObj);
+      // Update local state
+      setCombinations((prev) =>
+        prev.map((c) =>
+          c.id === mappingCombinationId
+            ? { ...c, [mappingWerktuig.id]: mapping }
+            : c
+        )
+      );
+      showMessage({ message: "Koppeling mapping opgeslagen", type: "success" });
+      setKoppelingMappingModalVisible(false);
+    } catch (error) {
+      showMessage({
+        message: "Fout bij opslaan mapping",
+        description: error.message,
+        type: "danger",
+      });
+    } finally {
+      setSavingMapping(false);
+    }
+  };
+
+  // --- Render Eye Modal ---
+  const renderEyeModal = () => {
+    if (!eyeModalVisible || !eyeTractor) return null;
+    // Find the combination for this tractor
+    const combination = combinations.find((c) => c.tractorId === eyeTractor.id);
+    // Get all gekoppelde werktuigen (equipment IDs)
+    const gekoppeldeWerktuigen =
+      combination && combination.equipmentIds ? combination.equipmentIds : [];
+
+    // Handler to delete werktuig from combination (no confirmation)
+    const handleDeleteWerktuigFromCombination = async (werktuigId) => {
+      if (!combination) return;
+      try {
+        // Remove from equipmentIds
+        const newEquipmentIds = (combination.equipmentIds || []).filter(
+          (id) => id !== werktuigId
+        );
+        // Remove mapping field using Firestore deleteField()
+        const updateObj = { equipmentIds: newEquipmentIds };
+        updateObj[werktuigId] = deleteField();
+        const combinationRef = doc(db, COMBINATIONS_COLLECTION, combination.id);
+        await updateDoc(combinationRef, updateObj);
+        // Refetch combinations to ensure UI is in sync with Firestore
+        fetchCombinations();
+        showMessage({
+          message: "Werktuig verwijderd uit combinatie",
+          type: "success",
+        });
+      } catch (error) {
+        showMessage({
+          message: "Fout bij verwijderen werktuig",
+          description: error.message,
+          type: "danger",
+        });
+      }
+    };
+
+    return (
+      <Modal
+        visible={eyeModalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setEyeModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>
+              Gekoppelde werktuigen voor {eyeTractor.name}
+            </Text>
+            {gekoppeldeWerktuigen.length === 0 ? (
+              <View style={styles.emptySelectionList}>
+                <Text>Geen gekoppelde werktuigen</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={gekoppeldeWerktuigen}
+                keyExtractor={(id) => id}
+                renderItem={({ item }) => {
+                  const werktuig = getEquipmentInfo(item);
+                  if (!werktuig) return null;
+                  return (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        marginBottom: 14,
+                        backgroundColor: "#f7f7f7",
+                        borderRadius: 10,
+                        padding: 10,
+                      }}
+                    >
+                      {werktuig.imageUri ? (
+                        <Image
+                          source={{ uri: werktuig.imageUri }}
+                          style={{
+                            width: 54,
+                            height: 54,
+                            borderRadius: 8,
+                            marginRight: 14,
+                            backgroundColor: "#eee",
+                          }}
+                          resizeMode="contain"
+                        />
+                      ) : (
+                        <View
+                          style={{
+                            width: 54,
+                            height: 54,
+                            borderRadius: 8,
+                            backgroundColor: "#eee",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            marginRight: 14,
+                          }}
+                        >
+                          <Text>Geen</Text>
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontWeight: "bold", fontSize: 16 }}>
+                          {werktuig.name}
+                        </Text>
+                        <Text style={{ color: "#666", fontSize: 14 }}>
+                          Type: {werktuig.type}
+                        </Text>
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => {
+                          // Open koppeling mapping modal for this werktuig
+                          handleOpenKoppelingMapping(
+                            werktuig,
+                            eyeTractor,
+                            combination.id
+                          );
+                          setEyeModalVisible(false);
+                        }}
+                      >
+                        <Text style={{ fontSize: 22, marginLeft: 8 }}>✏️</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() =>
+                          handleDeleteWerktuigFromCombination(item)
+                        }
+                        style={{ marginLeft: 8 }}
+                      >
+                        <Text style={{ fontSize: 22, color: "#e53935" }}>
+                          🗑️
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  );
+                }}
+                style={{ marginBottom: 18, marginTop: 8 }}
+              />
+            )}
+            <TouchableOpacity
+              style={[styles.modalButton, styles.closeButton]}
+              onPress={() => setEyeModalVisible(false)}
+            >
+              <Text style={styles.buttonText}>Sluiten</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -715,139 +1806,10 @@ export default function CombinatieConfig() {
       )}
 
       {/* Add/Edit Combination Modal */}
-      <Modal
-        visible={modalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              {editMode ? "Combinatie bewerken" : "Nieuwe combinatie toevoegen"}
-            </Text>
-
-            <ScrollView style={styles.formContainer}>
-              <Text style={styles.inputLabel}>Naam *</Text>
-              <TextInput
-                style={styles.input}
-                value={combinationName}
-                onChangeText={setCombinationName}
-                placeholder="Bijv. Combinatie 1, Ploegcombinatie, etc."
-              />
-
-              <Text style={styles.inputLabel}>Beschrijving</Text>
-              <TextInput
-                style={[styles.input, styles.textArea]}
-                value={combinationDescription}
-                onChangeText={setCombinationDescription}
-                placeholder="Optionele beschrijving van de combinatie"
-                multiline
-                numberOfLines={3}
-              />
-
-              <Text style={styles.inputLabel}>Tractor *</Text>
-              <TouchableOpacity
-                style={[styles.input, styles.selector]}
-                onPress={() => setTractorModalVisible(true)}
-              >
-                {selectedTractorId ? (
-                  <Text>
-                    {getTractorInfo(selectedTractorId)?.brand}{" "}
-                    {getTractorInfo(selectedTractorId)?.model} (
-                    {getTractorInfo(selectedTractorId)?.name})
-                  </Text>
-                ) : (
-                  <Text style={styles.placeholderText}>
-                    Selecteer een tractor
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              <Text style={styles.inputLabel}>Werktuigen</Text>
-              <TouchableOpacity
-                style={[styles.input, styles.selector]}
-                onPress={() => setEquipmentModalVisible(true)}
-              >
-                <Text>
-                  {selectedEquipmentIds.length > 0
-                    ? `${selectedEquipmentIds.length} werktuig(en) geselecteerd`
-                    : "Selecteer werktuigen"}
-                </Text>
-              </TouchableOpacity>
-
-              {selectedEquipmentIds.length > 0 && (
-                <View style={styles.selectedEquipmentList}>
-                  {selectedEquipmentIds.map((equipId) => {
-                    const equip = getEquipmentInfo(equipId);
-                    return equip ? (
-                      <View key={equipId} style={styles.selectedEquipmentItem}>
-                        <Text>{equip.name}</Text>
-                        <TouchableOpacity
-                          style={styles.removeButton}
-                          onPress={() => toggleEquipmentSelection(equipId)}
-                        >
-                          <Text style={styles.removeButtonText}>X</Text>
-                        </TouchableOpacity>
-                      </View>
-                    ) : null;
-                  })}
-                </View>
-              )}
-            </ScrollView>
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => setModalVisible(false)}
-              >
-                <Text style={styles.buttonText}>Annuleren</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.modalButton, styles.saveButton]}
-                onPress={handleSaveCombination}
-              >
-                <Text style={styles.buttonText}>Opslaan</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {renderAddCombinationModal()}
 
       {/* Tractor Selection Modal */}
-      <Modal
-        visible={tractorModalVisible}
-        animationType="slide"
-        transparent={true}
-        onRequestClose={() => setTractorModalVisible(false)}
-      >
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Selecteer een tractor</Text>
-
-            {tractors.length === 0 ? (
-              <View style={styles.emptySelectionList}>
-                <Text>Geen tractoren beschikbaar</Text>
-                <Text>Voeg eerst tractoren toe in tractorbeheer</Text>
-              </View>
-            ) : (
-              <FlatList
-                data={tractors}
-                renderItem={renderTractorItem}
-                keyExtractor={(item) => item.id}
-                style={styles.selectionList}
-              />
-            )}
-
-            <TouchableOpacity
-              style={[styles.modalButton, styles.closeButton]}
-              onPress={() => setTractorModalVisible(false)}
-            >
-              <Text style={styles.buttonText}>Sluiten</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
+      {renderTractorSelectionModal()}
 
       {/* Equipment Selection Modal */}
       <Modal
@@ -885,387 +1847,39 @@ export default function CombinatieConfig() {
       </Modal>
 
       {renderConnectionMappingModal()}
+
+      {/* Settings Modal */}
+      {renderSettingsModal()}
+
+      {/* Eye Modal */}
+      {renderEyeModal()}
+
+      {renderKoppelingMappingModal()}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "#f5f5f5",
-  },
-  centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 16,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#ddd",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: "bold",
-    flex: 1,
-  },
-  addButton: {
-    backgroundColor: "#4CAF50",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
-    alignSelf: "flex-start",
-  },
-  buttonText: {
-    color: "#fff",
-    fontWeight: "bold",
-    fontSize: 14,
-  },
-  list: {
-    padding: 16,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 20,
-  },
-  emptyText: {
-    fontSize: 18,
-    marginBottom: 8,
-  },
-  combinationItem: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1,
-    elevation: 2,
-  },
-  combinationHeader: {
-    marginBottom: 10,
-  },
-  combinationName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginBottom: 4,
-  },
-  combinationDescription: {
-    color: "#666",
-    marginBottom: 4,
-  },
-  tractorInfo: {
-    fontWeight: "500",
-    color: "#2196F3",
-  },
-  equipmentList: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#eee",
-  },
-  sectionTitle: {
-    fontWeight: "bold",
-    marginBottom: 6,
-  },
-  equipmentItem: {
-    marginLeft: 8,
-    marginBottom: 2,
-  },
-  noEquipment: {
-    fontStyle: "italic",
-    color: "#666",
-    marginLeft: 8,
-  },
-  actions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 12,
-    gap: 8,
-  },
-  actionButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-    alignItems: "center",
-    minWidth: 90,
-  },
-  editButton: {
-    backgroundColor: "#2196F3",
-  },
-  deleteButton: {
-    backgroundColor: "#F44336",
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: "#fff",
-    borderRadius: 8,
-    padding: 20,
-    width: "100%",
-    maxHeight: "90%",
-    flex: 1,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  formContainer: {
-    maxHeight: 350,
-  },
-  inputLabel: {
-    fontSize: 16,
-    marginBottom: 4,
-    fontWeight: "500",
-  },
-  input: {
-    backgroundColor: "#f9f9f9",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 4,
-    padding: 10,
-    marginBottom: 16,
-  },
-  textArea: {
-    height: 80,
-    textAlignVertical: "top",
-  },
-  selector: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-  placeholderText: {
-    color: "#999",
-  },
-  selectedEquipmentList: {
-    marginBottom: 16,
-  },
-  selectedEquipmentItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: "#e3f2fd",
-    borderRadius: 4,
-    padding: 8,
-    marginBottom: 4,
-  },
-  removeButton: {
-    backgroundColor: "#ffcdd2",
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  removeButtonText: {
-    color: "#b71c1c",
-    fontWeight: "bold",
-    fontSize: 12,
-  },
-  modalActions: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    marginTop: 16,
-    gap: 8,
-  },
-  modalButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderRadius: 4,
-    alignItems: "center",
-    minWidth: 100,
-  },
-  cancelButton: {
-    backgroundColor: "#9E9E9E",
-  },
-  saveButton: {
-    backgroundColor: "#4CAF50",
-  },
-  closeButton: {
-    backgroundColor: "#2196F3",
-    marginTop: 16,
-  },
-  selectionList: {
-    maxHeight: 350,
-  },
-  selectionItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
-  },
-  selectedItem: {
-    backgroundColor: "#e3f2fd",
-  },
-  selectionItemContent: {
-    flex: 1,
-  },
-  itemName: {
-    fontWeight: "bold",
-    marginBottom: 2,
-  },
-  checkboxContainer: {
-    padding: 4,
-  },
-  checkbox: {
-    width: 24,
-    height: 24,
-    borderWidth: 2,
-    borderColor: "#2196F3",
-    borderRadius: 4,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  checkboxSelected: {
-    backgroundColor: "#2196F3",
-  },
-  checkmark: {
-    color: "#fff",
-    fontWeight: "bold",
-  },
-  emptySelectionList: {
-    padding: 20,
-    alignItems: "center",
-  },
-  warningText: {
-    color: "#f44336",
-    fontSize: 12,
-    marginTop: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 20,
-    textAlign: "center",
-  },
-  mappingContainer: {
-    flex: 1,
-    minHeight: 100,
-    marginBottom: 16,
-  },
-  mappingLegend: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 15,
-    gap: 20,
-  },
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  legendDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#f5f5f5",
-    borderWidth: 1,
-    borderColor: "#ddd",
-  },
-  mappingRow: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  mappingWerktuig: {
-    flex: 1,
-    alignItems: "center",
-  },
-  mappingArrowContainer: {
-    flex: 0.5,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingTop: 25,
-  },
-  mappingTractor: {
-    flex: 2,
-    alignItems: "center",
-  },
-  mappingLabel: {
-    fontSize: 14,
-    marginBottom: 8,
-    color: "#666",
-  },
-  connectionBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f5f5f5",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  connectionBadgeMapped: {
-    backgroundColor: "#2196F3",
-    borderColor: "#1976D2",
-  },
-  connectionNumber: {
-    fontSize: 18,
-    color: "#666",
-  },
-  connectionNumberMapped: {
-    color: "#fff",
-  },
-  tractorConnectionsGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "flex-start",
-    gap: 8,
-    maxWidth: 200,
-  },
-  tractorConnectionButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#f5f5f5",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  tractorConnectionButtonSelected: {
-    backgroundColor: "#2196F3",
-    borderColor: "#1976D2",
-  },
-  tractorConnectionButtonUsed: {
-    opacity: 0.5,
-  },
-  tractorConnectionNumber: {
-    fontSize: 16,
-    color: "#666",
-  },
-  tractorConnectionNumberSelected: {
-    color: "#fff",
-  },
-  mappingArrow: {
-    fontSize: 24,
-    color: "#666",
-  },
-  mappingHeaderContainer: {
-    marginBottom: 16,
-  },
-  mappingContentContainer: {
-    paddingBottom: 16,
-  },
-});
+// --- NFC MOCK SCAN LOGIC FOR KOPPELING MAPPING MODAL ---
+// Simulate NFC scan for tractor or werktuig koppeling
+const mockNfcScan = async (type, max, used) => {
+  // Simulate a delay
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  // Pick a random available koppeling number
+  const all = Array.from({ length: max }, (_, i) => i + 1);
+  const available = all.filter((n) => !used.includes(n));
+  if (available.length === 0) return null;
+  // For demo, pick the first available
+  return available[0];
+};
+
+// --- Add koppeling pair handler for mapping modal ---
+const handleAddKoppelingPair = () => {
+  if (pendingTractorKoppeling && pendingWerktuigKoppeling) {
+    setMappingPairs((prev) => [
+      ...prev,
+      { tractor: pendingTractorKoppeling, werktuig: pendingWerktuigKoppeling },
+    ]);
+    setPendingTractorKoppeling(null);
+    setPendingWerktuigKoppeling(null);
+  }
+};
