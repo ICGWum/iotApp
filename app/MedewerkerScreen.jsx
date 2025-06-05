@@ -28,6 +28,14 @@ export default function MedewerkerScreen({ navigation }) {
   const [debiet, setDebiet] = useState(null);
   const [druk, setDruk] = useState(null);
 
+  const allTractorNumbers = Array.from({ length: tractorConnectors }, (_, i) => (i + 1).toString());
+  const allEquipmentNumbers = Array.from({ length: equipmentConnectors }, (_, i) => (i + 1).toString());
+  const usedTractorNumbers = Object.keys(connectorMapping);
+  const usedEquipmentNumbers = Object.values(connectorMapping).map(String);
+  const unusedTractorNumbers = allTractorNumbers.filter(n => !usedTractorNumbers.includes(n));
+  const unusedEquipmentNumbers = allEquipmentNumbers.filter(n => !usedEquipmentNumbers.includes(n));
+
+
   // Fetch first tractor from Firestore and set koppelingen
   const handleTractorPress = async () => {
   setLoadingTractor(true);
@@ -247,24 +255,24 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
                   )}
 
                   {/* Render excess grey balls for tractor */}
-                  {tractorConnectors > equipmentConnectors &&
-                    [...Array(tractorConnectors - equipmentConnectors)].map((_, i) => (
-                      <View key={`tractor-grey-${i}`} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                        <View style={[styles.connectorBallWithNumber, styles.connectorBallGrey]}>
-                          <Text style={styles.connectorBallNumber}>{equipmentConnectors + i + 1}</Text>
-                        </View>
+                  {unusedTractorNumbers.map((num, i) => (
+                    <View key={`tractor-grey-${num}`} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+                      <View style={[styles.connectorBallWithNumber, styles.connectorBallGrey]}>
+                        <Text style={styles.connectorBallNumber}>{num}</Text>
                       </View>
-                    ))}
+                    </View>
+                  ))}
+
                   {/* Render excess grey balls for equipment */}
-                  {equipmentConnectors > tractorConnectors &&
-                    [...Array(equipmentConnectors - tractorConnectors)].map((_, i) => (
-                      <View key={`equipment-grey-${i}`} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
-                        <View style={{ width: 28 }}></View><View style={{ width: 60 }}></View>
-                        <View style={[styles.connectorBallWithNumber, styles.connectorBallGrey]}>
-                          <Text style={styles.connectorBallNumber}>{tractorConnectors + i + 1}</Text>
-                        </View>
+                  {unusedEquipmentNumbers.map((num, i) => (
+                    <View key={`equipment-grey-${num}`} style={{ flexDirection: "row", alignItems: "center", marginBottom: 8 }}>
+                      <View style={{ width: 28 }}></View>
+                      <View style={{ width: 60 }}></View>
+                      <View style={[styles.connectorBallWithNumber, styles.connectorBallGrey]}>
+                        <Text style={styles.connectorBallNumber}>{num}</Text>
                       </View>
-                    ))}
+                    </View>
+                  ))}
                 </View>
               </View>
               {/* Add more modal content here if needed */}

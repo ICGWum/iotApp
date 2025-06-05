@@ -15,7 +15,11 @@
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
-      }
+      },
+      "permissions": [
+        "android.permission.NFC"
+      ],
+      "package": "com.wimoudman.iotapp"
     },
     "web": {
       "bundler": "metro",
@@ -33,9 +37,18 @@
           "backgroundColor": "#ffffff"
         }
       ],
+      "react-native-nfc-manager"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "c2fa9e93-cb20-4204-baad-e9f9f7f60432"
+      }
     }
   }
 }
