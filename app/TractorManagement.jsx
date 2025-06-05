@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import styles from "./styles/tractor";
+import { Platform } from "react-native";
 import {
   View,
   Text,
@@ -59,6 +60,12 @@ export default function TractorManagement({ navigation }) {
 
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [deleteAnim] = useState(new Animated.Value(0));
+
+  useEffect(() => {
+    if (Platform.OS !== "web") {
+      NfcManager.start();
+    }
+  }, []);
 
   const generateNextTractorId = async () => {
     try {
@@ -588,17 +595,15 @@ export default function TractorManagement({ navigation }) {
                       : styles.scanTagButtonDefault,
                   ]}
                   onPress={async () => await scanNfcTag(scanningIndex)}
-                  disabled={!!scannedTags[scanningIndex]}
                 >
-                  <Text style={styles.scanTagButtonText}>
-                    {scannedTags[scanningIndex] ? "Gescand" : "SCAN TAG"}
-                  </Text>
+                  <Text style={styles.scanTagButtonText}>Scan NFC Tag</Text>
                 </TouchableOpacity>
-                {scannedTags[scanningIndex] && (
-                  <Text style={{ color: "#4CAF50", marginBottom: 12 }}>
-                    Tag: {scannedTags[scanningIndex]}
-                  </Text>
-                )}
+                {scannedTags[scanningIndex] &&
+                  scannedTags[scanningIndex] !== "" && (
+                    <Text style={{ color: "#4CAF50", marginBottom: 12 }}>
+                      Gescand{"\n"}Tag: {scannedTags[scanningIndex]}
+                    </Text>
+                  )}
                 <View
                   style={{
                     flexDirection: "row",
