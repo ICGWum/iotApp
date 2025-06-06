@@ -122,14 +122,18 @@ useEffect(() => {
         const docRef = doc(db, "combinations", selectedTractorName);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          // Get mapping array for this equipment
-          const mapping = docSnap.get(selectedEquipmentName) || [];
+          // Get mapping object for this equipment
+          const mappingRaw = docSnap.get(selectedEquipmentName) || {};
+          // Convert {1: 1, 2: 5, 3: 6} to [["1", "1"], ["2", "5"], ["3", "6"]]
+          const mapping = Object.entries(mappingRaw).map(([tractor, equipment]) => [
+            tractor, // already a string
+            equipment.toString(), // convert value to string
+          ]);
           if (!mapping.length) {
-            // Combination not available
             alert("Deze combinatie is niet beschikbaar.");
             setSelectedEquipmentName("");
-            setEquipmentConnectors(0);         // <-- Add this line
-            setEquipmentTags([]);              // <-- And this line
+            setEquipmentConnectors(0);
+            setEquipmentTags([]);
             setConnectorMapping([]);
             setInstructions({});
             return;
@@ -140,11 +144,10 @@ useEffect(() => {
           const instructionsField = docSnap.get(selectedEquipmentName + "i") || {};
           setInstructions(instructionsField);
         } else {
-          // Combination document does not exist
           alert("Deze combinatie is niet beschikbaar.");
           setSelectedEquipmentName("");
-          setEquipmentConnectors(0);         // <-- Add this line
-          setEquipmentTags([]);              // <-- And this line
+          setEquipmentConnectors(0);
+          setEquipmentTags([]);
           setConnectorMapping([]);
           setInstructions({});
         }
