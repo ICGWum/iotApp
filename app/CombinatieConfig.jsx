@@ -981,7 +981,136 @@ export default function CombinatieConfig() {
                   alignItems: "center",
                   justifyContent: "center",
                 }}
-                onPress={handleScanKoppeling}
+                onPress={async () => {
+                  setNfcScanError("");
+                  try {
+                    // Step 1: Scan tractor NFC tag
+                    setNfcScanStep({ tractor: null, werktuig: null });
+                    await NfcManager.requestTechnology(NfcTech.Ndef, {
+                      alertMessage: "Scan een tractor NFC tag",
+                    });
+                    const tractorTag = await NfcManager.getTag();
+                    await NfcManager.cancelTechnologyRequest();
+                    if (!tractorTag || !tractorTag.id) {
+                      setNfcScanError("Geen geldige tractor NFC tag gevonden.");
+                      setNfcScanStep(null);
+                      return;
+                    }
+                    // Find tractor koppeling number by matching tag.id in mappingTractor.tags
+                    let tractorKoppelingNum = null;
+                    if (mappingTractor && mappingTractor.tags) {
+                      for (const [koppelingNum, tagId] of Object.entries(
+                        mappingTractor.tags
+                      )) {
+                        if (tagId === tractorTag.id) {
+                          tractorKoppelingNum = parseInt(koppelingNum);
+                          break;
+                        }
+                      }
+                    }
+                    if (!tractorKoppelingNum) {
+                      setNfcScanError(
+                        "Deze tractor NFC tag is niet gekoppeld aan een koppeling."
+                      );
+                      setNfcScanStep(null);
+                      return;
+                    }
+                    setHighlightedTractorKoppeling(tractorKoppelingNum);
+                    setNfcScanStep({ tractor: tractorTag.id, werktuig: null });
+
+                    // Step 2: Scan werktuig NFC tag
+                    await NfcManager.requestTechnology(NfcTech.Ndef, {
+                      alertMessage: "Scan een werktuig NFC tag",
+                    });
+                    const werktuigTag = await NfcManager.getTag();
+                    await NfcManager.cancelTechnologyRequest();
+                    if (!werktuigTag || !werktuigTag.id) {
+                      setNfcScanError(
+                        "Geen geldige werktuig NFC tag gevonden."
+                      );
+                      setNfcScanStep(null);
+                      setHighlightedTractorKoppeling(null);
+                      return;
+                    }
+                    // Find werktuig koppeling number by matching tag.id in mappingWerktuig.tags
+                    let werktuigKoppelingNum = null;
+                    if (mappingWerktuig && mappingWerktuig.tags) {
+                      for (const [koppelingNum, tagId] of Object.entries(
+                        mappingWerktuig.tags
+                      )) {
+                        if (tagId === werktuigTag.id) {
+                          werktuigKoppelingNum = parseInt(koppelingNum);
+                          break;
+                        }
+                      }
+                    }
+                    if (!werktuigKoppelingNum) {
+                      setNfcScanError(
+                        "Deze werktuig NFC tag is niet gekoppeld aan een koppeling."
+                      );
+                      setNfcScanStep(null);
+                      setHighlightedTractorKoppeling(null);
+                      return;
+                    }
+                    setHighlightedWerktuigKoppeling(werktuigKoppelingNum);
+                    setNfcScanStep({
+                      tractor: tractorTag.id,
+                      werktuig: werktuigTag.id,
+                    });
+
+                    // Check if tag IDs match (combination requirement)
+                    if (tractorTag.id !== werktuigTag.id) {
+                      setNfcScanError(
+                        "De NFC tags komen niet overeen. Scan dezelfde tag op tractor en werktuig."
+                      );
+                      setNfcScanStep(null);
+                      setHighlightedTractorKoppeling(null);
+                      setHighlightedWerktuigKoppeling(null);
+                      return;
+                    }
+
+                    // Check if this pair is already combined
+                    const alreadyCombined = mappingPairs.some(
+                      (p) =>
+                        p.tractor === tractorKoppelingNum ||
+                        p.werktuig === werktuigKoppelingNum
+                    );
+                    if (alreadyCombined) {
+                      setNfcScanError("Deze koppeling is al gecombineerd.");
+                      setNfcScanStep(null);
+                      setHighlightedTractorKoppeling(null);
+                      setHighlightedWerktuigKoppeling(null);
+                      return;
+                    }
+                    // Add to mappingPairs
+                    setMappingPairs((prev) => [
+                      ...prev,
+                      {
+                        tractor: tractorKoppelingNum,
+                        werktuig: werktuigKoppelingNum,
+                      },
+                    ]);
+                    // Remove from remaining lists
+                    setRemainingTractorKoppelingen((prev) =>
+                      prev.filter((n) => n !== tractorKoppelingNum)
+                    );
+                    setRemainingWerktuigKoppelingen((prev) =>
+                      prev.filter((n) => n !== werktuigKoppelingNum)
+                    );
+                    // Reset highlights after a short delay
+                    setTimeout(() => {
+                      setHighlightedTractorKoppeling(null);
+                      setHighlightedWerktuigKoppeling(null);
+                      setNfcScanStep(null);
+                    }, 1200);
+                  } catch (e) {
+                    setNfcScanError("NFC scan geannuleerd of mislukt.");
+                    setNfcScanStep(null);
+                    setHighlightedTractorKoppeling(null);
+                    setHighlightedWerktuigKoppeling(null);
+                    NfcManager.cancelTechnologyRequest().catch(() => {});
+                  }
+                }}
               >
                 <Text
                   style={{
@@ -1863,6 +1992,17 @@ const handleScanKoppeling = async () => {
     }
     setHighlightedWerktuigKoppeling(werktuigKoppelingNum);
     setNfcScanStep({ tractor: tractorTag.id, werktuig: werktuigTag.id });
+
+    // Check if tag IDs match (combination requirement)
+    if (tractorTag.id !== werktuigTag.id) {
+      setNfcScanError(
+        "De NFC tags komen niet overeen. Scan dezelfde tag op tractor en werktuig."
+      );
+      setNfcScanStep(null);
+      setHighlightedTractorKoppeling(null);
+      setHighlightedWerktuigKoppeling(null);
+      return;
+    }
 
     // Check if this pair is already combined
     const alreadyCombined = mappingPairs.some(
