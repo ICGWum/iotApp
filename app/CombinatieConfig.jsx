@@ -981,9 +981,7 @@ export default function CombinatieConfig() {
                   alignItems: "center",
                   justifyContent: "center",
                 }}
-                onPress={() => {
-                  /* No functionality yet */
-                }}
+                onPress={handleScanKoppeling}
               >
                 <Text
                   style={{
