@@ -13,6 +13,7 @@ export default StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingTop: 40, // Added to match Tractor header
     padding: 16,
     backgroundColor: "#fff",
     borderBottomWidth: 1,
@@ -27,10 +28,14 @@ export default StyleSheet.create({
   },
   addButton: {
     backgroundColor: "#4CAF50",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 4,
+    paddingHorizontal: 24, // wider
+    paddingVertical: 10, // slightly taller
+    borderRadius: 20,
     alignSelf: "flex-start",
+    minWidth: 200, // make button wider
+    maxWidth: 300,
+    elevation: 2,
+    marginLeft: 8,
   },
   buttonText: {
     color: "#fff",
@@ -195,6 +200,13 @@ export default StyleSheet.create({
     marginTop: 16,
     gap: 8,
   },
+  modalActionsVertical: {
+    flexDirection: "column",
+    justifyContent: "flex-end",
+    alignItems: "stretch",
+    marginTop: 32,
+    gap: 12,
+  },
   modalButton: {
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -203,7 +215,7 @@ export default StyleSheet.create({
     minWidth: 100,
   },
   cancelButton: {
-    backgroundColor: "#9E9E9E",
+    backgroundColor: "#F44336", // red
   },
   saveButton: {
     backgroundColor: "#4CAF50",
@@ -377,5 +389,21 @@ export default StyleSheet.create({
   },
   mappingContentContainer: {
     paddingBottom: 16,
+  },
+  modalActionsBottom: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 32,
+    gap: 12,
+  },
+  blueButton: {
+    backgroundColor: "#2196F3",
+  },
+  redButton: {
+    backgroundColor: "#F44336",
+  },
+  nfcButton: {
+    backgroundColor: "#FF9800",
   },
 });

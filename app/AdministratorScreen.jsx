@@ -40,7 +40,7 @@ export default function AdministratorScreen({ navigation }) {
 
         <TouchableOpacity
           style={styles.menuItem}
-          onPress={() => navigation.navigate("CombinatieConfig")}
+          onPress={() => navigation.navigate("CombinationsManagement")}
         >
           <Text style={styles.menuTitle}>Combinatie Configuratie</Text>
           <Text style={styles.menuDescription}>

@@ -19,12 +19,12 @@ import FlashMessage, { showMessage } from "react-native-flash-message";
 import MedewerkerScreen from "./MedewerkerScreen";
 import AdministratorScreen from "./AdministratorScreen";
 import KoppelenScreen from "./KoppelenScreen";
-import CombinatieConfig from "./CombinatieConfig";
 import Banner from "./Banner";
 import KoppelingTutorial from "./KoppelingTutorial";
-// import TractorManagement from "./TractorManagement";
+
 import TractorManagement from "./Admin/Tractor/TractorManagementScreen";
 import EquipmentManagement from "./Admin/Werktuig/EquipmentManagementScreen";
+import CombinationsManagementScreen from "./Admin/Combinations/CombinationsManagementScreen";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -149,14 +149,6 @@ export default function App() {
           options={{ headerShown: true, headerTitle: "Koppelen" }}
         />
         <Stack.Screen
-          name="CombinatieConfig"
-          component={CombinatieConfig}
-          options={{
-            headerShown: true,
-            headerTitle: "Combinatie Configuratie",
-          }}
-        />
-        <Stack.Screen
           name="KoppelingTutorial"
           component={KoppelingTutorial}
           options={{ headerShown: true, headerTitle: "Koppeling Tutorial" }}
@@ -170,6 +162,14 @@ export default function App() {
           name="EquipmentManagement"
           component={EquipmentManagement}
           options={{ headerShown: true, headerTitle: "Werktuigbeheer" }}
+        />
+        <Stack.Screen
+          name="CombinationsManagement"
+          component={CombinationsManagementScreen}
+          options={{
+            headerShown: true,
+            headerTitle: "Combinatiebeheer"
+          }}
         />
       </Stack.Navigator>
       <FlashMessage position="top" />
