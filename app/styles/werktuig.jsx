@@ -34,6 +34,16 @@ export default StyleSheet.create({
     marginLeft: 8,
     elevation: 2,
   },
+  addButtonWide: {
+    backgroundColor: "#4CAF50",
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    elevation: 2,
+    width: "100%",
+    alignSelf: "center",
+    justifyContent: "center",
+  },
   buttonText: {
     fontSize: 16,
     fontWeight: "500",
@@ -163,5 +173,24 @@ export default StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
     fontSize: 16,
+  },
+  infoModalButton: {
+    width: 240,
+    paddingVertical: 12,
+    borderRadius: 4,
+    alignItems: "center",
+    marginBottom: 10,
+    alignSelf: "center",
+  },
+  infoModalButtonGroup: {
+    flexDirection: "column",
+    alignItems: "stretch",
+    justifyContent: "center",
+    gap: 8,
+    marginTop: 24,
+  },
+  alertForeground: {
+    zIndex: 9999,
+    elevation: 10,
   },
 });

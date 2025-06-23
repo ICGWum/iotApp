@@ -22,8 +22,9 @@ import KoppelenScreen from "./KoppelenScreen";
 import CombinatieConfig from "./CombinatieConfig";
 import Banner from "./Banner";
 import KoppelingTutorial from "./KoppelingTutorial";
-import TractorManagement from "./TractorManagement";
-import EquipmentManagement from "./EquipmentManagement";
+// import TractorManagement from "./TractorManagement";
+import TractorManagement from "./Admin/Tractor/TractorManagementScreen";
+import EquipmentManagement from "./Admin/Werktuig/EquipmentManagementScreen";
 
 // Firebase configuration
 const firebaseConfig = {
@@ -61,7 +62,7 @@ function HomeScreen({ navigation }) {
       const userEmail = userCredential.user.email;
 
       // Navigate to different screens based on the user's email
-      if (userEmail === "administrator@test.nl") {
+      if (userEmail === "administrator@oldehove.nl") {
         navigation.replace("Administrator");
       } else {
         navigation.replace("Medewerker");

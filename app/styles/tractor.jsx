@@ -31,6 +31,19 @@ export default StyleSheet.create({
     paddingHorizontal: 16,
     marginLeft: 8,
     elevation: 2,
+    minWidth: "40%",
+    maxWidth: "60%",
+    alignSelf: "flex-end",
+  },
+  addButtonWide: {
+    backgroundColor: "#4CAF50",
+    borderRadius: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    elevation: 2,
+    width: "100%",
+    alignSelf: "center",
+    justifyContent: "center",
   },
   buttonText: {
     fontSize: 16,
@@ -110,11 +123,13 @@ export default StyleSheet.create({
   },
   cancelButton: {
     backgroundColor: "#f44336",
-    marginRight: 8,
+    marginRight: 0, // Remove right margin for centering
+    alignSelf: "center", // Center the button
   },
   saveButton: {
     backgroundColor: "#4CAF50",
-    marginLeft: 8,
+    marginLeft: 0, // Remove left margin for centering
+    alignSelf: "center", // Center the button
   },
   scanTagButton: {
     backgroundColor: "#2196F3",
