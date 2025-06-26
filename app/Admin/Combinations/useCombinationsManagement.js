@@ -486,8 +486,14 @@ export default function useCombinationsManagement() {
     if (!mappingCombinationId || !mappingWerktuig) return;
     try {
       setSavingMapping(true);
-      // Prepare mapping object: { werktuigId: { tractorKoppeling: werktuigKoppeling, ... } }
-      const mappingObj = mapping;
+      // Prepare mapping object: { tractorKoppeling: werktuigKoppeling }
+      const mappingObj = {};
+      Object.entries(mapping).forEach(
+        ([tractorKoppeling, werktuigKoppeling]) => {
+          mappingObj[tractorKoppeling] = werktuigKoppeling;
+        }
+      );
+
       // Save to Firestore under the combination document, under the werktuig id
       const combinationRef = doc(
         db,
@@ -497,10 +503,13 @@ export default function useCombinationsManagement() {
       await updateDoc(combinationRef, {
         [mappingWerktuig.id]: mappingObj,
       });
+
+      // Update local state
       setConnectionMappings((prev) => ({
         ...prev,
         [mappingWerktuig.id]: mappingObj,
       }));
+
       showMessage({ message: "Koppelingen opgeslagen", type: "success" });
       setKoppelingMappingModalVisible(false);
       setMappingPairs([]);
