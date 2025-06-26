@@ -3,6 +3,7 @@ import { Modal, View, Text, TouchableOpacity, Alert } from "react-native";
 import styles from "../../styles/combinatie";
 import useTractorManagement from "../Tractor/useTractorManagement";
 import useEquipmentManagement from "../Werktuig/useEquipmentManagement";
+import useCombinationsManagement from "./useCombinationsManagement";
 
 export default function KoppelingMappingModal({
   koppelingMappingModalVisible,
@@ -10,7 +11,7 @@ export default function KoppelingMappingModal({
   mappingWerktuig,
   mappingPairs,
   onCancel,
-  onSave={handleSaveKoppelingMapping},
+  onSave,
 }) {
   // State for scan step and mapping
   const [scanStep, setScanStep] = useState(0); // 0: tractor, 1: werktuig
@@ -20,6 +21,8 @@ export default function KoppelingMappingModal({
   const [highlighted, setHighlighted] = useState({}); // {tractor: [idx], werktuig: [idx]}
   const { tractors, scanTractorNfc } = useTractorManagement();
   const { equipment, scanWerktuigNfc } = useEquipmentManagement();
+
+  const {handleSaveKoppelingMapping, handleSaveCombination} = useCombinationsManagement();
 
   if (!mappingTractor || !mappingWerktuig) return null;
 
@@ -50,6 +53,11 @@ export default function KoppelingMappingModal({
       (pair) =>
         pair.tractorIdx === tractorIdx || pair.werktuigIdx === werktuigIdx
     );
+
+const handleKoppelingModalSave = (mapping) => {
+  handleSaveKoppelingMapping(mapping); // updates state
+  handleSaveCombination();             // saves to Firestore
+};
 
   // Scan logic
   const handleScan = async () => {
@@ -130,7 +138,7 @@ export default function KoppelingMappingModal({
     mappedPairs.forEach((pair) => {
       mapping[pair.tractorIdx] = pair.werktuigIdx; // +1 for display numbering
     });
-    onSave(mapping);
+    handleKoppelingModalSave(mapping);
     setMappedPairs([]);
     setHighlighted({});
     setScanStep(0);
