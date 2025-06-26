@@ -41,6 +41,8 @@ export default function MedewerkerScreen({ navigation }) {
   const [highlightedTractor, setHighlightedTractor] = useState(null);
   const [highlightedEquipment, setHighlightedEquipment] = useState(null);
 
+  const [pendingScan, setPendingScan] = useState(null); // { type: "tractor"|"equipment", index: number }
+
   // Fetch first tractor from Firestore and set koppelingen
   const handleTractorPress = async () => {
   if (Platform.OS === "web") {
@@ -59,12 +61,19 @@ export default function MedewerkerScreen({ navigation }) {
     const q = query(collection(db, "tractors"));
     const snapshot = await getDocs(q);
     let found = false;
+    const scannedTag = String(tag.id).trim().toLowerCase();
     snapshot.forEach((docSnap) => {
-      if (docSnap.get("tag") === tag.id) {
-        const koppelingen = docSnap.get("aantalKoppelingen") || 0;
-        setTractorConnectors(docSnap.get("connectors") || []);
+      const tagsObj = docSnap.get("tags") || {};
+      const tractorTag = docSnap.get("tag") || "";
+      const tractorTagLower = String(tractorTag).trim().toLowerCase();
+      const tractorTagsArr = Object.entries(tagsObj).map(([num, tag]) => ({
+        num: String(num), // connector number as string
+        tag: String(tag).trim().toLowerCase(),
+      }));
+      if (tractorTagsArr.some(t => t.tag === scannedTag) || tractorTagLower === scannedTag) {
+        setTractorConnectors(docSnap.get("aantalKoppelingen") || 0);
         setSelectedTractorName(docSnap.id);
-        setTractorTags(docSnap.get("tags") || []);
+        setTractorTags(tractorTagsArr);
         found = true;
       }
     });
@@ -96,12 +105,19 @@ const handleEquipmentPress = async () => {
     const q = query(collection(db, "equipment"));
     const snapshot = await getDocs(q);
     let found = false;
+    const scannedTag = String(tag.id).trim().toLowerCase();
     snapshot.forEach((docSnap) => {
-      if (docSnap.get("tag") === tag.id) {
-        const koppelingen = docSnap.get("aantalKoppelingen") || 0;
+      const tagsObj = docSnap.get("tags") || {};
+      const equipmentTag = docSnap.get("tag") || "";
+      const equipmentTagLower = String(equipmentTag).trim().toLowerCase();
+      const tagValues = Object.entries(tagsObj).map(([num, tag]) => ({
+        num: String(num), // connector number as string
+        tag: String(tag).trim().toLowerCase(),
+      }));
+      if (tagValues.some(t => t.tag === scannedTag) || equipmentTagLower === scannedTag) {
         setSelectedEquipmentName(docSnap.id);
-        setEquipmentConnectors(docSnap.get("connectors") || []);
-        setEquipmentTags(docSnap.get("tags") || []);
+        setEquipmentConnectors(docSnap.get("aantalKoppelingen") || 0);
+        setEquipmentTags(tagValues);
         found = true;
       }
     });
@@ -360,34 +376,87 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
                   try {
                     await NfcManager.requestTechnology(NfcTech.Ndef);
                     const tag = await NfcManager.getTag();
+                    await NfcManager.cancelTechnologyRequest();
                     if (!tag || !tag.id) {
                       alert("Geen NFC tag gevonden.");
-                      await NfcManager.cancelTechnologyRequest();
                       return;
                     }
-                    // Find index in tractorTags or equipmentTags
-                    const tractorIdx = tractorTags.indexOf(tag.id);
-                    const equipmentIdx = equipmentTags.indexOf(tag.id);
+                    const scannedTag = String(tag.id).trim().toLowerCase();
+                    const tractorObj = tractorTags.find(t => t.tag === scannedTag);
+                    const equipmentObj = equipmentTags.find(t => t.tag === scannedTag);
 
-                    if (tractorIdx !== -1) {
-                      setHighlightedTractor(tractorIdx);
-                      setHighlightedEquipment(null);
-                      await NfcManager.cancelTechnologyRequest();
+                    if (!pendingScan) {
+                      // First scan: highlight the ball
+                      if (tractorObj) {
+                        const mappingIndex = connectorMapping.findIndex(([tractorNum]) => tractorNum === tractorObj.num);
+                        setHighlightedTractor(mappingIndex);
+                        setHighlightedEquipment(null);
+                        setPendingScan({ type: "tractor", index: mappingIndex, num: tractorObj.num });
+                      } else if (equipmentObj) {
+                        const mappingIndex = connectorMapping.findIndex(([, equipmentNum]) => equipmentNum === equipmentObj.num);
+                        setHighlightedEquipment(mappingIndex);
+                        setHighlightedTractor(null);
+                        setPendingScan({ type: "equipment", index: mappingIndex, num: equipmentObj.num });
+                      } else {
+                        alert("Tag niet gevonden in geselecteerde tractor of werktuig.");
+                        setHighlightedTractor(null);
+                        setHighlightedEquipment(null);
+                      }
                       return;
+                    } else {
+                      // Second scan: check if it matches the mapping
+                      if (pendingScan.type === "tractor" && equipmentObj) {
+                        // Find the mapping for the pending tractor
+                        const mapping = connectorMapping[pendingScan.index];
+                        if (mapping && mapping[1] === equipmentObj.num) {
+                          // Correct connection!
+                          setUserConnections(prev => [
+                            ...prev,
+                            { tractor: mapping[0], equipment: mapping[1] }
+                          ]);
+                          setHighlightedTractor(null);
+                          setHighlightedEquipment(null);
+                          setPendingScan(null);
+                        } else {
+                          // Wrong connection, reset
+                          setHighlightedTractor(null);
+                          setHighlightedEquipment(null);
+                          setPendingScan(null);
+                          alert("Geen geldige verbinding. Probeer opnieuw.");
+                        }
+                      } else if (pendingScan.type === "equipment" && tractorObj) {
+                        // Find the mapping for the pending equipment
+                        const mapping = connectorMapping[pendingScan.index];
+                        if (mapping && mapping[0] === tractorObj.num) {
+                          // Correct connection!
+                          setUserConnections(prev => [
+                            ...prev,
+                            { tractor: mapping[0], equipment: mapping[1] }
+                          ]);
+                          setHighlightedTractor(null);
+                          setHighlightedEquipment(null);
+                          setPendingScan(null);
+                        } else {
+                          // Wrong connection, reset
+                          setHighlightedTractor(null);
+                          setHighlightedEquipment(null);
+                          setPendingScan(null);
+                          alert("Geen geldige verbinding. Probeer opnieuw.");
+                        }
+                      } else {
+                        // Scanned the same type twice or invalid
+                        setHighlightedTractor(null);
+                        setHighlightedEquipment(null);
+                        setPendingScan(null);
+                        alert("Scan eerst een tractor en dan een werktuig, of andersom.");
+                      }
                     }
-                    if (equipmentIdx !== -1) {
-                      setHighlightedEquipment(equipmentIdx);
-                      setHighlightedTractor(null);
-                      await NfcManager.cancelTechnologyRequest();
-                      return;
-                    }
-                    alert("Tag niet gevonden in geselecteerde tractor of werktuig.");
-                    setHighlightedTractor(null);
-                    setHighlightedEquipment(null);
-                    await NfcManager.cancelTechnologyRequest();
                   } catch (ex) {
                     await NfcManager.cancelTechnologyRequest();
                     alert("NFC scan geannuleerd of mislukt.");
+                    setHighlightedTractor(null);
+                    setHighlightedEquipment(null);
+                    setPendingScan(null);
                   }
                 }}
               />
@@ -432,7 +501,7 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
                   setShowNextPage(true);
                 }}
                 disabled={
-                  userConnections.length !== Object.entries(connectorMapping).length ||
+                  userConnections.length !== connectorMapping.length ||
                   !selectedTractorName ||
                   !selectedEquipmentName
                 }
