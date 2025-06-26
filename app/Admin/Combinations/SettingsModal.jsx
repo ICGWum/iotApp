@@ -52,7 +52,9 @@ export default function SettingsModal({
       await NfcManager.cancelTechnologyRequest();
       if (tag && tag.id) {
         // Find werktuig with matching tag
-        const found = equipment.find((w) => w.tag === tag.id);
+        const found = equipment.find(
+          (w) => Object.values(w.tags || {}).includes(tag.id)
+        );
         if (found) {
           onSelectWerktuig(found.id);
         } else {

@@ -323,31 +323,34 @@ export default function useTractorManagement() {
   };
 
   const scanTractorNfc = async () => {
-    try {
-      await NfcManager.requestTechnology(NfcTech.Ndef);
-      const tag = await NfcManager.getTag();
-      if (tag && tag.id) {
-        setTractorNfc(tag.id.toString());
-        showMessage({
-          message: `Tractor NFC gescand!`,
-          description: `Tag ID: ${tag.id}`,
-          type: "success",
-        });
-      } else {
-        showMessage({ message: "Geen tag gevonden", type: "warning" });
-      }
-    } catch (e) {
-      if (e.message !== "cancelled") {
-        showMessage({
-          message: "Fout bij NFC scan",
-          description: e.message,
-          type: "danger",
-        });
-      }
-    } finally {
-      NfcManager.cancelTechnologyRequest();
+  try {
+    await NfcManager.requestTechnology(NfcTech.Ndef);
+    const tag = await NfcManager.getTag();
+    if (tag && tag.id) {
+      setTractorNfc(tag.id.toString());
+      showMessage({
+        message: `Tractor NFC gescand!`,
+        description: `Tag ID: ${tag.id}`,
+        type: "success",
+      });
+      return tag; // <-- ADD THIS LINE
+    } else {
+      showMessage({ message: "Geen tag gevonden", type: "warning" });
+      return null; // <-- ADD THIS LINE
     }
-  };
+  } catch (e) {
+    if (e.message !== "cancelled") {
+      showMessage({
+        message: "Fout bij NFC scan",
+        description: e.message,
+        type: "danger",
+      });
+    }
+    return null; // <-- ADD THIS LINE
+  } finally {
+    NfcManager.cancelTechnologyRequest();
+  }
+};
 
   return {
     tractors,

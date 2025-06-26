@@ -454,7 +454,9 @@ export default function useCombinationsManagement() {
       const tag = await NfcManager.getTag();
       const tagId = tag?.id || tag?.ndefMessage?.[0]?.id || null;
       if (!tagId) throw new Error("Geen NFC tag gevonden");
-      const found = equipment.find((e) => e.nfcTagId === tagId);
+      const found = equipment.find((e) =>
+      Object.values(e.tags || {}).includes(tagId)
+    );
       if (found) {
         setMappingWerktuig(found);
         // Use the current tractor in context, or prompt for selection if needed

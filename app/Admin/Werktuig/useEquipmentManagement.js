@@ -322,31 +322,34 @@ export default function useEquipmentManagement() {
   };
 
   const scanWerktuigNfc = async () => {
-    try {
-      await NfcManager.requestTechnology(NfcTech.Ndef);
-      const tag = await NfcManager.getTag();
-      if (tag && tag.id) {
-        setWerktuigNfc(tag.id.toString());
-        showMessage({
-          message: `Werktuig NFC gescand!`,
-          description: `Tag ID: ${tag.id}`,
-          type: "success",
-        });
-      } else {
-        showMessage({ message: "Geen tag gevonden", type: "warning" });
-      }
-    } catch (ex) {
-      if (ex.message !== "cancelled") {
-        showMessage({
-          message: "Fout bij NFC scan",
-          description: ex.message,
-          type: "danger",
-        });
-      }
-    } finally {
-      NfcManager.cancelTechnologyRequest();
+  try {
+    await NfcManager.requestTechnology(NfcTech.Ndef);
+    const tag = await NfcManager.getTag();
+    if (tag && tag.id) {
+      setWerktuigNfc(tag.id.toString());
+      showMessage({
+        message: `Werktuig NFC gescand!`,
+        description: `Tag ID: ${tag.id}`,
+        type: "success",
+      });
+      return tag; // <-- ADD THIS LINE
+    } else {
+      showMessage({ message: "Geen tag gevonden", type: "warning" });
+      return null; // <-- ADD THIS LINE
     }
-  };
+  } catch (ex) {
+    if (ex.message !== "cancelled") {
+      showMessage({
+        message: "Fout bij NFC scan",
+        description: ex.message,
+        type: "danger",
+      });
+    }
+    return null; // <-- ADD THIS LINE
+  } finally {
+    NfcManager.cancelTechnologyRequest();
+  }
+};
 
   // Add handler for next koppeling scan
   const handleNextScan = () => {

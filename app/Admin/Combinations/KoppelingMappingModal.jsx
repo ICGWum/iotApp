@@ -10,7 +10,7 @@ export default function KoppelingMappingModal({
   mappingWerktuig,
   mappingPairs,
   onCancel,
-  onSave,
+  onSave={handleSaveKoppelingMapping},
 }) {
   // State for scan step and mapping
   const [scanStep, setScanStep] = useState(0); // 0: tractor, 1: werktuig
@@ -29,7 +29,7 @@ export default function KoppelingMappingModal({
     if (mappingTractor.tags) {
       return Object.entries(mappingTractor.tags).map(([num, nfcTag]) => ({
         nfcTag,
-        num: parseInt(num, 10) - 1, // for 0-based index
+        num: parseInt(num, 10), // for 1-based index
       }));
     }
     return mappingTractor.koppelingen || [];
@@ -38,7 +38,7 @@ export default function KoppelingMappingModal({
     if (mappingWerktuig.tags) {
       return Object.entries(mappingWerktuig.tags).map(([num, nfcTag]) => ({
         nfcTag,
-        num: parseInt(num, 10) - 1, // for 0-based index
+        num: parseInt(num, 10), // for 1-based index
       }));
     }
     return mappingWerktuig.koppelingen || [];
@@ -59,15 +59,26 @@ export default function KoppelingMappingModal({
         const tag = await scanTractorNfc(); // should return tag object or tag id
         // Find which koppeling (by index) matches this tag
         const koppelingen = getTractorKoppelingen();
-        const found = koppelingen.find((k) => k.nfcTag === (tag?.id || tag));
+        const found = koppelingen.find(
+          (k) =>
+            String(k.nfcTag).trim().toLowerCase() ===
+            String(tag?.id || tag).trim().toLowerCase()
+        );
+        console.log("Found tractor koppeling:", found);
+        console.log("Tag:", tag);
+        // console.log("Pending tractor index:", found.num);
         if (found && !isMapped(found.num, null)) {
+
           setPendingTractorIdx(found.num);
           setPendingTractorTag(tag?.id || tag);
           setHighlighted({ tractor: found.num });
           Alert.alert("Tractor koppeling gevonden");
           setScanStep(1);
-        } else {
-          Alert.alert("Geen tractor koppeling gevonden of al gekoppeld");
+        } else if (found && isMapped(found.num, null)) {
+          Alert.alert("Tractor koppeling gevonden maar al gekoppeld");
+        } else if (!found) {
+          console.log("No matching tractor koppeling found for tag:", tag);
+          Alert.alert("Geen tractor koppeling gevonden");
         }
       } catch (e) {
         Alert.alert("Scan geannuleerd of mislukt");
@@ -77,7 +88,11 @@ export default function KoppelingMappingModal({
       try {
         const tag = await scanWerktuigNfc();
         const koppelingen = getWerktuigKoppelingen();
-        const found = koppelingen.find((k) => k.nfcTag === (tag?.id || tag));
+        const found = koppelingen.find(
+          (k) =>
+            String(k.nfcTag).trim().toLowerCase() ===
+            String(tag?.id || tag).trim().toLowerCase()
+        );
         if (found && !isMapped(null, found.num)) {
           // Save this pair
           setMappedPairs((prev) => [
@@ -113,7 +128,7 @@ export default function KoppelingMappingModal({
     // Build mapping object: { tractorKoppelingNum: werktuigKoppelingNum }
     const mapping = {};
     mappedPairs.forEach((pair) => {
-      mapping[pair.tractorIdx + 1] = pair.werktuigIdx + 1; // +1 for display numbering
+      mapping[pair.tractorIdx] = pair.werktuigIdx; // +1 for display numbering
     });
     onSave(mapping);
     setMappedPairs([]);
@@ -195,30 +210,25 @@ export default function KoppelingMappingModal({
                 >
                   Tractor
                 </Text>
-                {Array.from(
-                  { length: mappingTractor.aantalKoppelingen || 0 },
-                  (_, i) => (
-                    <View
-                      key={i}
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 8,
-                        backgroundColor: getTractorColor(i),
-                        justifyContent: "center",
-                        alignItems: "center",
-                        marginVertical: 4,
-                        marginBottom: 6,
-                        borderWidth: 1,
-                        borderColor: "#ddd",
-                      }}
-                    >
-                      <Text style={{ fontSize: 17, color: "#333" }}>
-                        {i + 1}
-                      </Text>
-                    </View>
-                  )
-                )}
+                {getTractorKoppelingen().map((k) => (
+                  <View
+                    key={k.num}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 8,
+                      backgroundColor: getTractorColor(k.num),
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginVertical: 4,
+                      marginBottom: 6,
+                      borderWidth: 1,
+                      borderColor: "#ddd",
+                    }}
+                  >
+                    <Text style={{ fontSize: 17, color: "#333" }}>{k.num}</Text>
+                  </View>
+                ))}
               </View>
               <View
                 style={{
@@ -239,30 +249,25 @@ export default function KoppelingMappingModal({
                 >
                   Werktuig
                 </Text>
-                {Array.from(
-                  { length: mappingWerktuig.aantalKoppelingen || 0 },
-                  (_, i) => (
-                    <View
-                      key={i}
-                      style={{
-                        width: 40,
-                        height: 40,
-                        borderRadius: 8,
-                        backgroundColor: getWerktuigColor(i),
-                        justifyContent: "center",
-                        alignItems: "center",
-                        marginVertical: 4,
-                        marginBottom: 6,
-                        borderWidth: 1,
-                        borderColor: "#ddd",
-                      }}
-                    >
-                      <Text style={{ fontSize: 17, color: "#333" }}>
-                        {i + 1}
-                      </Text>
-                    </View>
-                  )
-                )}
+                {getWerktuigKoppelingen().map((k) => (
+                  <View
+                    key={k.num}
+                    style={{
+                      width: 40,
+                      height: 40,
+                      borderRadius: 8,
+                      backgroundColor: getWerktuigColor(k.num),
+                      justifyContent: "center",
+                      alignItems: "center",
+                      marginVertical: 4,
+                      marginBottom: 6,
+                      borderWidth: 1,
+                      borderColor: "#ddd",
+                    }}
+                  >
+                    <Text style={{ fontSize: 17, color: "#333" }}>{k.num}</Text>
+                  </View>
+                ))}
               </View>
             </View>
           </View>
