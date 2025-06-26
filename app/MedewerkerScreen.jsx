@@ -30,10 +30,11 @@ export default function MedewerkerScreen({ navigation }) {
   const [debiet, setDebiet] = useState(null);
   const [druk, setDruk] = useState(null);
 
-  const allTractorNumbers = Array.from({ length: tractorConnectors }, (_, i) => (i + 1).toString());
-  const allEquipmentNumbers = Array.from({ length: equipmentConnectors }, (_, i) => (i + 1).toString());
-  const usedTractorNumbers = Object.keys(connectorMapping);
-  const usedEquipmentNumbers = Object.values(connectorMapping).map(String);
+  const allTractorNumbers = (Array.isArray(tractorConnectors) ? tractorConnectors : Array.from({ length: tractorConnectors }, (_, i) => i + 1)).map(String);
+  const allEquipmentNumbers = (Array.isArray(equipmentConnectors) ? equipmentConnectors : Array.from({ length: equipmentConnectors }, (_, i) => i + 1)).map(String);
+  const usedTractorNumbers = connectorMapping.map(([tractor]) => tractor);
+  const usedEquipmentNumbers = connectorMapping.map(([, equipment]) => equipment);
+
   const unusedTractorNumbers = allTractorNumbers.filter(n => !usedTractorNumbers.includes(n));
   const unusedEquipmentNumbers = allEquipmentNumbers.filter(n => !usedEquipmentNumbers.includes(n));
 
@@ -61,7 +62,7 @@ export default function MedewerkerScreen({ navigation }) {
     snapshot.forEach((docSnap) => {
       if (docSnap.get("tag") === tag.id) {
         const koppelingen = docSnap.get("aantalKoppelingen") || 0;
-        setTractorConnectors(koppelingen);
+        setTractorConnectors(docSnap.get("connectors") || []);
         setSelectedTractorName(docSnap.id);
         setTractorTags(docSnap.get("tags") || []);
         found = true;
@@ -99,7 +100,7 @@ const handleEquipmentPress = async () => {
       if (docSnap.get("tag") === tag.id) {
         const koppelingen = docSnap.get("aantalKoppelingen") || 0;
         setSelectedEquipmentName(docSnap.id);
-        setEquipmentConnectors(koppelingen);
+        setEquipmentConnectors(docSnap.get("connectors") || []);
         setEquipmentTags(docSnap.get("tags") || []);
         found = true;
       }
@@ -266,7 +267,7 @@ console.log("tractorConnectors", tractorConnectors, "equipmentConnectors", equip
               <View style={styles.connectorsRow}>
                 <View style={styles.connectorColumn}>
                   {/* Connected (blue) rows with ? button */}
-                  {Object.entries(connectorMapping).map(([tractor, equipment], i) => {
+                  {connectorMapping.map(([tractor, equipment], i) => {
                     const isConnected = userConnections.some(
                       (conn) => conn.tractor === tractor && conn.equipment === equipment
                     );
