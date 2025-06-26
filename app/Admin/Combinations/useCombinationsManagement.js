@@ -476,15 +476,42 @@ export default function useCombinationsManagement() {
   };
 
   // Save koppeling mapping for a werktuig
-  const handleSaveKoppelingMapping = (mapping) => {
-    if (!mappingWerktuig) return;
-    setConnectionMappings((prev) => ({
-      ...prev,
-      [mappingWerktuig.id]: mapping,
-    }));
-    setKoppelingMappingModalVisible(false);
-    showMessage({ message: "Koppeling mapping opgeslagen", type: "success" });
-    // Optionally, call handleSaveCombination() here to persist immediately
+  const handleSaveKoppelingMapping = async (mapping) => {
+    if (!mappingCombinationId || !mappingWerktuig) return;
+    try {
+      setSavingMapping(true);
+      // Prepare mapping object: { werktuigId: { tractorKoppeling: werktuigKoppeling, ... } }
+      const mappingObj = mapping;
+      // Save to Firestore under the combination document, under the werktuig id
+      const combinationRef = doc(
+        db,
+        COMBINATIONS_COLLECTION,
+        mappingCombinationId
+      );
+      await updateDoc(combinationRef, {
+        [mappingWerktuig.id]: mappingObj,
+      });
+      setConnectionMappings((prev) => ({
+        ...prev,
+        [mappingWerktuig.id]: mappingObj,
+      }));
+      showMessage({ message: "Koppelingen opgeslagen", type: "success" });
+      setKoppelingMappingModalVisible(false);
+      setMappingPairs([]);
+      setRemainingTractorKoppelingen([]);
+      setRemainingWerktuigKoppelingen([]);
+      setHighlightedTractorKoppeling(null);
+      setHighlightedWerktuigKoppeling(null);
+      setNfcScanStep(null);
+    } catch (error) {
+      showMessage({
+        message: "Fout bij opslaan koppelingen",
+        description: error.message,
+        type: "danger",
+      });
+    } finally {
+      setSavingMapping(false);
+    }
   };
 
   return {
