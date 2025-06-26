@@ -22,7 +22,7 @@ export default function KoppelingMappingModal({
   const { tractors, scanTractorNfc } = useTractorManagement();
   const { equipment, scanWerktuigNfc } = useEquipmentManagement();
 
-  const {handleSaveKoppelingMapping, handleSaveCombination} = useCombinationsManagement();
+  const { handleSaveKoppelingMapping } = useCombinationsManagement();
 
   if (!mappingTractor || !mappingWerktuig) return null;
 
@@ -54,10 +54,9 @@ export default function KoppelingMappingModal({
         pair.tractorIdx === tractorIdx || pair.werktuigIdx === werktuigIdx
     );
 
-const handleKoppelingModalSave = (mapping) => {
-  handleSaveKoppelingMapping(mapping); // updates state
-  handleSaveCombination();             // saves to Firestore
-};
+  const handleKoppelingModalSave = (mapping) => {
+    handleSaveKoppelingMapping(mapping); // Only save the mapping, not the combination!
+  };
 
   // Scan logic
   const handleScan = async () => {
@@ -76,7 +75,6 @@ const handleKoppelingModalSave = (mapping) => {
         console.log("Tag:", tag);
         // console.log("Pending tractor index:", found.num);
         if (found && !isMapped(found.num, null)) {
-
           setPendingTractorIdx(found.num);
           setPendingTractorTag(tag?.id || tag);
           setHighlighted({ tractor: found.num });
