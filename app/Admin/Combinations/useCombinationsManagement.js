@@ -455,8 +455,8 @@ export default function useCombinationsManagement() {
       const tagId = tag?.id || tag?.ndefMessage?.[0]?.id || null;
       if (!tagId) throw new Error("Geen NFC tag gevonden");
       const found = equipment.find((e) =>
-      Object.values(e.tags || {}).includes(tagId)
-    );
+        Object.values(e.tags || {}).includes(tagId)
+      );
       if (found) {
         setMappingWerktuig(found);
         // Use the current tractor in context, or prompt for selection if needed
@@ -473,6 +473,18 @@ export default function useCombinationsManagement() {
     } finally {
       NfcManager.cancelTechnologyRequest();
     }
+  };
+
+  // Save koppeling mapping for a werktuig
+  const handleSaveKoppelingMapping = (mapping) => {
+    if (!mappingWerktuig) return;
+    setConnectionMappings((prev) => ({
+      ...prev,
+      [mappingWerktuig.id]: mapping,
+    }));
+    setKoppelingMappingModalVisible(false);
+    showMessage({ message: "Koppeling mapping opgeslagen", type: "success" });
+    // Optionally, call handleSaveCombination() here to persist immediately
   };
 
   return {
@@ -565,5 +577,6 @@ export default function useCombinationsManagement() {
     handleCombineWerktuig,
     handleDeleteWerktuigFromCombination,
     handleScanWerktuigNFC,
+    handleSaveKoppelingMapping,
   };
 }
