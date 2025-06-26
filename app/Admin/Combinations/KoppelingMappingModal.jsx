@@ -3,7 +3,8 @@ import { Modal, View, Text, TouchableOpacity, Alert } from "react-native";
 import styles from "../../styles/combinatie";
 import useTractorManagement from "../Tractor/useTractorManagement";
 import useEquipmentManagement from "../Werktuig/useEquipmentManagement";
-import useCombinationsManagement from "./useCombinationsManagement";
+import { doc, setDoc, updateDoc, getDoc } from "firebase/firestore";
+import { db } from "../../Firebase"; // Adjust the path if needed
 
 export default function KoppelingMappingModal({
   koppelingMappingModalVisible,
@@ -11,7 +12,6 @@ export default function KoppelingMappingModal({
   mappingWerktuig,
   mappingPairs,
   onCancel,
-  onSave,
 }) {
   // State for scan step and mapping
   const [scanStep, setScanStep] = useState(0); // 0: tractor, 1: werktuig
@@ -21,8 +21,6 @@ export default function KoppelingMappingModal({
   const [highlighted, setHighlighted] = useState({}); // {tractor: [idx], werktuig: [idx]}
   const { tractors, scanTractorNfc } = useTractorManagement();
   const { equipment, scanWerktuigNfc } = useEquipmentManagement();
-
-  const { handleSaveKoppelingMapping } = useCombinationsManagement();
 
   if (!mappingTractor || !mappingWerktuig) return null;
 
@@ -53,10 +51,6 @@ export default function KoppelingMappingModal({
       (pair) =>
         pair.tractorIdx === tractorIdx || pair.werktuigIdx === werktuigIdx
     );
-
-  const handleKoppelingModalSave = (mapping) => {
-    handleSaveKoppelingMapping(mapping); // Only save the mapping, not the combination!
-  };
 
   // Scan logic
   const handleScan = async () => {
@@ -126,23 +120,47 @@ export default function KoppelingMappingModal({
   };
 
   // Save all mapped pairs
-  const handleSave = () => {
-    if (mappedPairs.length === 0) {
-      Alert.alert("Geen koppelingen om op te slaan");
-      return;
+  const handleSave = async () => {
+  if (mappedPairs.length === 0) {
+    Alert.alert("Geen koppelingen om op te slaan");
+    return;
+  }
+
+  // Build mapping object: { tractorKoppelingNum: werktuigKoppelingNum }
+  const mapping = {};
+  mappedPairs.forEach((pair) => {
+    mapping[pair.tractorIdx] = pair.werktuigIdx;
+  });
+
+  // Firestore: combinations collection, document = tractor name, field = werktuig name
+  const docRef = doc(db, "combinations", mappingTractor.name);
+
+  try {
+    // Get the document to check if it exists
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      // Update the document: add or update the werktuig field
+      await updateDoc(docRef, {
+        [mappingWerktuig.name]: mapping,
+      });
+    } else {
+      // Create the document with name and werktuig field
+      await setDoc(docRef, {
+        name: mappingTractor.name,
+        [mappingWerktuig.name]: mapping,
+      });
     }
-    // Build mapping object: { tractorKoppelingNum: werktuigKoppelingNum }
-    const mapping = {};
-    mappedPairs.forEach((pair) => {
-      mapping[pair.tractorIdx] = pair.werktuigIdx; // +1 for display numbering
-    });
-    handleKoppelingModalSave(mapping);
+    Alert.alert("Koppelingen opgeslagen!");
     setMappedPairs([]);
     setHighlighted({});
     setScanStep(0);
     setPendingTractorIdx(null);
     setPendingTractorTag(null);
-  };
+    onCancel && onCancel();
+  } catch (e) {
+    Alert.alert("Fout bij opslaan", e.message);
+  }
+};
 
   // UI coloring logic
   const getTractorColor = (idx) => {
