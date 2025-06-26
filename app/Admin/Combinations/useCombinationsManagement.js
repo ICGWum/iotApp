@@ -483,16 +483,34 @@ export default function useCombinationsManagement() {
 
   // Save koppeling mapping for a werktuig
   const handleSaveKoppelingMapping = async (mapping) => {
-    if (!mappingCombinationId || !mappingWerktuig) return;
+    if (!mappingCombinationId || !mappingWerktuig) {
+      console.log("[DEBUG] Missing required data:", {
+        mappingCombinationId,
+        mappingWerktuig: mappingWerktuig?.id,
+      });
+      return;
+    }
     try {
       setSavingMapping(true);
+      console.log("[DEBUG] Input mapping:", mapping);
+
       // Prepare mapping object: { tractorKoppeling: werktuigKoppeling }
       const mappingObj = {};
       Object.entries(mapping).forEach(
         ([tractorKoppeling, werktuigKoppeling]) => {
           mappingObj[tractorKoppeling] = werktuigKoppeling;
+          console.log("[DEBUG] Mapping pair:", {
+            tractorKoppeling,
+            werktuigKoppeling,
+          });
         }
       );
+
+      console.log("[DEBUG] Final mapping object:", {
+        combinationId: mappingCombinationId,
+        werktuigId: mappingWerktuig.id,
+        mappingObj,
+      });
 
       // Save to Firestore under the combination document, under the werktuig id
       const combinationRef = doc(
@@ -500,15 +518,25 @@ export default function useCombinationsManagement() {
         COMBINATIONS_COLLECTION,
         mappingCombinationId
       );
-      await updateDoc(combinationRef, {
+      console.log("[DEBUG] Updating Firestore document:", combinationRef.path);
+
+      const updateData = {
         [mappingWerktuig.id]: mappingObj,
-      });
+      };
+      console.log("[DEBUG] Update data:", updateData);
+
+      await updateDoc(combinationRef, updateData);
+      console.log("[DEBUG] Firestore update successful");
 
       // Update local state
-      setConnectionMappings((prev) => ({
-        ...prev,
-        [mappingWerktuig.id]: mappingObj,
-      }));
+      setConnectionMappings((prev) => {
+        const newMappings = {
+          ...prev,
+          [mappingWerktuig.id]: mappingObj,
+        };
+        console.log("[DEBUG] New connection mappings:", newMappings);
+        return newMappings;
+      });
 
       showMessage({ message: "Koppelingen opgeslagen", type: "success" });
       setKoppelingMappingModalVisible(false);
@@ -519,6 +547,7 @@ export default function useCombinationsManagement() {
       setHighlightedWerktuigKoppeling(null);
       setNfcScanStep(null);
     } catch (error) {
+      console.error("[DEBUG] Error saving mapping:", error);
       showMessage({
         message: "Fout bij opslaan koppelingen",
         description: error.message,
