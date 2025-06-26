@@ -454,17 +454,23 @@ export default function useCombinationsManagement() {
       const tag = await NfcManager.getTag();
       const tagId = tag?.id || tag?.ndefMessage?.[0]?.id || null;
       if (!tagId) throw new Error("Geen NFC tag gevonden");
-      const found = equipment.find((e) =>
-        Object.values(e.tags || {}).includes(tagId)
+      const scannedTag = tagId.toString().trim().toUpperCase();
+      // Debug logging
+      console.log("[NFC] Scanned werktuig tag:", scannedTag);
+      equipment.forEach((e) => {
+        console.log("[NFC] Werktuig:", e.name || e.id, "tag:", e.tag);
+      });
+      // Only check the 'tag' field (main NFC), robust to case/whitespace
+      const found = equipment.find(
+        (e) => e.tag && e.tag.toString().trim().toUpperCase() === scannedTag
       );
       if (found) {
         setMappingWerktuig(found);
-        // Use the current tractor in context, or prompt for selection if needed
         setKoppelingMappingModalVisible(true);
       } else {
         showMessage({
           message: "Werktuig niet gevonden",
-          description: `Geen werktuig met NFC tag ${tagId} gevonden`,
+          description: `Geen werktuig met NFC tag ${scannedTag} gevonden`,
           type: "danger",
         });
       }
