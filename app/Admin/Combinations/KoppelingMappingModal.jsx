@@ -24,8 +24,25 @@ export default function KoppelingMappingModal({
   if (!mappingTractor || !mappingWerktuig) return null;
 
   // Helper: get koppelingen array from tractor/equipment
-  const getTractorKoppelingen = () => mappingTractor.koppelingen || [];
-  const getWerktuigKoppelingen = () => mappingWerktuig.koppelingen || [];
+  const getTractorKoppelingen = () => {
+    // If mappingTractor.tags exists, use it (object: {1: tag, 2: tag, ...})
+    if (mappingTractor.tags) {
+      return Object.entries(mappingTractor.tags).map(([num, nfcTag]) => ({
+        nfcTag,
+        num: parseInt(num, 10) - 1, // for 0-based index
+      }));
+    }
+    return mappingTractor.koppelingen || [];
+  };
+  const getWerktuigKoppelingen = () => {
+    if (mappingWerktuig.tags) {
+      return Object.entries(mappingWerktuig.tags).map(([num, nfcTag]) => ({
+        nfcTag,
+        num: parseInt(num, 10) - 1, // for 0-based index
+      }));
+    }
+    return mappingWerktuig.koppelingen || [];
+  };
 
   // Helper: check if a koppeling index is already mapped
   const isMapped = (tractorIdx, werktuigIdx) =>
@@ -42,11 +59,11 @@ export default function KoppelingMappingModal({
         const tag = await scanTractorNfc(); // should return tag object or tag id
         // Find which koppeling (by index) matches this tag
         const koppelingen = getTractorKoppelingen();
-        const idx = koppelingen.findIndex((k) => k.nfcTag === (tag?.id || tag));
-        if (idx !== -1 && !isMapped(idx, null)) {
-          setPendingTractorIdx(idx);
+        const found = koppelingen.find((k) => k.nfcTag === (tag?.id || tag));
+        if (found && !isMapped(found.num, null)) {
+          setPendingTractorIdx(found.num);
           setPendingTractorTag(tag?.id || tag);
-          setHighlighted({ tractor: idx });
+          setHighlighted({ tractor: found.num });
           Alert.alert("Tractor koppeling gevonden");
           setScanStep(1);
         } else {
@@ -60,19 +77,19 @@ export default function KoppelingMappingModal({
       try {
         const tag = await scanWerktuigNfc();
         const koppelingen = getWerktuigKoppelingen();
-        const idx = koppelingen.findIndex((k) => k.nfcTag === (tag?.id || tag));
-        if (idx !== -1 && !isMapped(null, idx)) {
+        const found = koppelingen.find((k) => k.nfcTag === (tag?.id || tag));
+        if (found && !isMapped(null, found.num)) {
           // Save this pair
           setMappedPairs((prev) => [
             ...prev,
             {
               tractorIdx: pendingTractorIdx,
-              werktuigIdx: idx,
+              werktuigIdx: found.num,
               tractorTag: pendingTractorTag,
               werktuigTag: tag?.id || tag,
             },
           ]);
-          setHighlighted({ tractor: pendingTractorIdx, werktuig: idx });
+          setHighlighted({ tractor: pendingTractorIdx, werktuig: found.num });
           Alert.alert("Werktuig koppeling gevonden");
           // Reset for next pair
           setScanStep(0);
