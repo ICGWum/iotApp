@@ -4,9 +4,9 @@ import { db } from "./Firebase"; // Import your Firebase configuration
 import { collection, getDocs, limit, query, doc, getDoc } from "firebase/firestore";
 import NfcManager, {NfcTech} from 'react-native-nfc-manager';
 import { Platform } from "react-native";
+import equipmentImg from '../assets/images/equipment.png';
 
 const tractorImg = { uri: "https://img.icons8.com/ios-filled/100/tractor.png" };
-const equipmentImg = { uri: "https://img.icons8.com/ios-filled/100/plough.png" };
 
 export default function MedewerkerScreen({ navigation }) {
   const [modalVisible, setModalVisible] = useState(false);
